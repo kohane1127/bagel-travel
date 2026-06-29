@@ -629,12 +629,28 @@ async function gistPull() {
     const content = gist.files['bagel_data.json'] && gist.files['bagel_data.json'].content;
     if (content) {
       const remote = JSON.parse(content);
-      data = remote;
-      saveData();
-      renderAll();
-      setSyncStatus('ok', '已載入雲端資料');
+      // Only overwrite if remote has actual data
+      if(remote && (
+        (remote.members && remote.members.length > 0) ||
+        (remote.places && remote.places.length > 0) ||
+        (remote.diaries && remote.diaries.length > 0)
+      )){
+        // Only replace local if remote has more or equal data
+        const localTotal = data.members.length + data.places.length + data.diaries.length;
+        const remoteTotal = (remote.members||[]).length + (remote.places||[]).length + (remote.diaries||[]).length;
+        if(remoteTotal >= localTotal){
+          data = remote;
+          saveData();
+          renderAll();
+          setSyncStatus('ok', '已載入雲端資料（'+remoteTotal+' 筆）');
+        } else {
+          setSyncStatus('ok', '本地資料較新，未覆蓋');
+        }
+      } else {
+        setSyncStatus('ok', '雲端尚無資料，保留本地');
+      }
     } else {
-      setSyncStatus('error', '找不到資料檔案');
+      setSyncStatus('ok', '雲端尚無資料');
     }
   } catch(e) { setSyncStatus('error', '讀取失敗'); }
 }
@@ -653,7 +669,8 @@ function saveSyncSettings() {
   localStorage.setItem('bagel_gist_id', GIST_ID);
   localStorage.setItem('bagel_gist_token', GIST_TOKEN);
   closeSyncModal();
-  if (GIST_ID) gistPull();
+  setSyncStatus('ok', '設定已儲存');
+  // Don't auto-pull on save - user must click ⬇️ to pull manually
 }
 
 function loadData(){try{const r=localStorage.getItem(STORAGE_KEY);if(r)data=JSON.parse(r);}catch(e){}}
@@ -777,7 +794,7 @@ function renderTwMap(){
     };
     el.onmouseleave=()=>{el.setAttribute('fill',color);el.style.fill=color;document.getElementById('map-tooltip').style.display='none';};
     el.onmousemove=e=>{const tt=document.getElementById('map-tooltip');tt.style.left=(e.clientX+14)+'px';tt.style.top=(e.clientY-10)+'px';};
-    el.onclick=()=>{doNav('diary');filterDiaries(name.replace('市','').replace('縣',''),null);};
+    el.onclick=()=>{doNav('map');};
   });
   visited.sort((a,b)=>b.n-a.n);
   const listEl=document.getElementById('county-list-items');
@@ -786,7 +803,7 @@ function renderTwMap(){
     ?'<p style="font-size:0.75rem;color:#A09488;">新增地點後會自動更新</p>'
     :visited.map(v=>'<div class="county-list-item"><span>'+v.name+'</span><span class="county-badge">'+v.n+'</span></div>').join('');
   listEl.querySelectorAll('.county-list-item').forEach((el,i)=>{
-    el.addEventListener('click',()=>{doNav('diary');filterDiaries(visited[i].name.replace('市','').replace('縣',''),null);});
+    el.addEventListener('click',()=>{doNav('map');});
   });
 }
 function renderHome(){
@@ -1227,9 +1244,10 @@ function deleteDiary(id){
 function renderAll(){renderHome();renderMembers();renderDiaries();renderPlaceList();}
 
 loadData();
-// Auto-pull from Gist on first load if configured
-if(GIST_ID){
-  setTimeout(()=>gistPull(), 500);
+// Auto-pull from Gist ONLY if we already have local data
+// (prevents empty Gist from wiping fresh demo data)
+if(GIST_ID && (data.members.length > 0 || data.places.length > 0)){
+  setTimeout(()=>gistPull(), 800);
 }
 if(data.members.length===0&&data.places.length===0){
   const mA={id:'demo-m1',name:'小圓',color:'#7A9E7E',tagline:'只要有咖啡，走到哪都行',bio:'喜歡在城市裡漫無目的地走，然後意外找到超棒的店。不吃香菜，對甜點永遠有空間。',prefs:'咖啡控, 甜點獵人, 不吃香菜, 愛逛二手書店',avatar:null};
