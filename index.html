@@ -710,6 +710,7 @@ async function gistPush() {
   if (!GIST_ID || !GIST_TOKEN) return;
   setSyncStatus('syncing', '同步中…');
   const pushPromise = (async () => {
+    const payload = JSON.stringify(data);
     try {
       const res = await fetch('https://api.github.com/gists/' + GIST_ID, {
         method: 'PATCH',
@@ -718,12 +719,43 @@ async function gistPush() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          files: { 'bagel_data.json': { content: JSON.stringify(data) } }
+          files: { 'bagel_data.json': { content: payload } }
         })
       });
-      if (res.ok) { setSyncStatus('ok', '已同步'); return true; }
-      else { setSyncStatus('error', '同步失敗 ' + res.status); return false; }
-    } catch(e) { setSyncStatus('error', '網路錯誤'); return false; }
+      if (!res.ok) {
+        setSyncStatus('error', '同步失敗 HTTP ' + res.status);
+        return false;
+      }
+      // 公司網路 / 代理伺服器有時會攔截請求並回傳假的成功狀態，
+      // 因此推送後重新讀取一次 Gist，確認內容真的寫入了
+      try {
+        const verifyRes = await fetch('https://api.github.com/gists/' + GIST_ID + '?_=' + Date.now(), {
+          headers: { 'Accept': 'application/vnd.github+json', 'Cache-Control': 'no-cache' }
+        });
+        if (verifyRes.ok) {
+          const verifyGist = await verifyRes.json();
+          const verifyContent = verifyGist.files['bagel_data.json'] && verifyGist.files['bagel_data.json'].content;
+          if (verifyContent === payload) {
+            setSyncStatus('ok', '✅ 已同步並驗證');
+            return true;
+          } else {
+            setSyncStatus('error', '⚠️ 同步未生效，請檢查網路');
+            console.error('Gist push verify mismatch: remote content differs from local payload');
+            return false;
+          }
+        } else {
+          // 驗證請求本身失敗，無法確認，但 PATCH 回應是 ok，標示為不確定
+          setSyncStatus('ok', '已送出（無法驗證）');
+          return true;
+        }
+      } catch(verifyErr) {
+        setSyncStatus('ok', '已送出（無法驗證）');
+        return true;
+      }
+    } catch(e) {
+      setSyncStatus('error', '網路錯誤，未同步');
+      return false;
+    }
   })();
   pendingPushPromise = pushPromise;
   await pushPromise;
