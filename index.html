@@ -28,6 +28,7 @@ nav{display:flex;gap:0.15rem;align-items:center;}
 .nav-dropdown-wrap{position:relative;}
 .nav-dropdown{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--white);border:1.5px solid var(--cream-deep);border-radius:14px;box-shadow:0 6px 20px var(--shadow);min-width:140px;padding:0.4rem;display:none;flex-direction:column;gap:0.15rem;z-index:200;}
 .nav-dropdown-wrap:hover .nav-dropdown{display:flex;}
+.nav-dropdown-wrap.open .nav-dropdown{display:flex;}
 .dropdown-item{background:none;border:none;font-family:'Noto Sans TC',sans-serif;font-size:0.82rem;color:var(--text-light);padding:0.45rem 0.85rem;border-radius:10px;cursor:pointer;text-align:left;transition:all 0.15s;}
 .dropdown-item:hover{background:var(--green-pale);color:var(--green);}
 .header-actions{display:flex;gap:0.5rem;align-items:center;}
@@ -282,12 +283,65 @@ textarea.form-input{resize:vertical;min-height:80px;}
 .empty-state{text-align:center;padding:4rem 2rem;color:var(--text-muted);}
 .empty-state .empty-icon{font-size:3rem;margin-bottom:1rem;opacity:0.4;}
 .empty-state p{font-size:0.875rem;line-height:1.8;}
-@media(max-width:720px){
-  .map-layout{grid-template-columns:1fr;grid-template-rows:auto 1fr;}
-  .map-sidebar{max-height:40vh;}
+@media(max-width:700px){
+  /* Header */
+  header{padding:0 1rem;height:56px;}
+  .site-logo span:last-child{display:none;}
+  .site-logo{font-size:1rem;}
+  nav{gap:0;}
+  .nav-btn{font-size:0.78rem;padding:0.35rem 0.55rem;}
+  .btn-edit{font-size:0.72rem;padding:0.3rem 0.55rem;}
+  #sync-btn{display:none!important;}
+
+  /* Views */
+  .view{padding-bottom:1rem;}
+
+  /* Hero */
+  .hero{padding:2rem 1rem 1.5rem;}
+  .hero h1{font-size:1.6rem;}
+  .hero p{font-size:0.82rem;}
+  .stats-row{gap:1.5rem;}
+  .stat-num{font-size:1.3rem;}
+
+  /* Home map */
+  .tw-map-section{padding:0 1rem 2rem;}
   .tw-map-wrap{grid-template-columns:1fr;}
+  .map-right-panel{position:static;max-width:100%;background:none;border:none;box-shadow:none;padding:0.75rem 0 0;}
+  .map-legend{flex-direction:row;flex-wrap:wrap;gap:0.5rem;}
+  .map-legend h3{width:100%;margin-bottom:0;}
+  .legend-row{font-size:0.72rem;}
+  .county-list{margin-top:0.5rem;}
+  .county-list-item{font-size:0.75rem;}
+
+  /* Bagel map */
+  .map-layout{grid-template-columns:1fr;grid-template-rows:auto 1fr;height:auto;}
+  .map-sidebar{max-height:35vh;overflow-y:auto;}
+  #osm-map{height:55vh!important;min-height:300px!important;}
+
+  /* Members */
+  .members-view{padding:1.5rem 1rem;}
   .members-grid{grid-template-columns:1fr;}
+  .member-card{padding:1.1rem;}
+
+  /* Diary */
+  .diary-view{padding:1.5rem 1rem;}
+  .diary-timeline{padding:0.75rem 1rem 1rem;}
+
+  /* Modals */
+  .modal{padding:1.25rem;border-radius:14px;}
   .form-row{grid-template-columns:1fr;}
+
+  /* Dropdown */
+  .nav-dropdown{left:auto;right:0;transform:none;}
+
+  /* Place card */
+  .place-card{padding:0.85rem;}
+}
+
+/* Scrollbar thin on mobile */
+@media(max-width:700px){
+  .map-sidebar::-webkit-scrollbar{width:3px;}
+  .map-sidebar::-webkit-scrollbar-thumb{background:var(--cream-deep);border-radius:3px;}
 }
 
 /* OSM map panel */
@@ -334,13 +388,13 @@ textarea.form-input{resize:vertical;min-height:80px;}
     <button class="nav-btn" id="nav-members" onclick="doNav('members')">關於貝果</button>
     <button class="nav-btn" id="nav-map" onclick="doNav('map')">貝果地圖</button>
     <div class="nav-dropdown-wrap">
-      <button class="nav-btn" id="nav-diary" onclick="doNav('diary')">旅遊行程 ▾</button>
+      <button class="nav-btn" id="nav-diary" onclick="toggleDiaryDropdown(event)">旅遊行程 ▾</button>
       <div class="nav-dropdown">
-        <button class="dropdown-item" onclick="doNav('diary');filterDiaries('北部',null)">🏙️ 北部</button>
-        <button class="dropdown-item" onclick="doNav('diary');filterDiaries('中部',null)">🏔️ 中部</button>
-        <button class="dropdown-item" onclick="doNav('diary');filterDiaries('南部',null)">🌊 南部</button>
-        <button class="dropdown-item" onclick="doNav('diary');filterDiaries('東部',null)">🌿 東部</button>
-        <button class="dropdown-item" onclick="doNav('diary');filterDiaries('全部',null)">📋 全部</button>
+        <button class="dropdown-item" onclick="document.querySelector('.nav-dropdown-wrap').classList.remove('open');doNav('diary');filterDiaries('北部',null)">🏙️ 北部</button>
+        <button class="dropdown-item" onclick="document.querySelector('.nav-dropdown-wrap').classList.remove('open');doNav('diary');filterDiaries('中部',null)">🏔️ 中部</button>
+        <button class="dropdown-item" onclick="document.querySelector('.nav-dropdown-wrap').classList.remove('open');doNav('diary');filterDiaries('南部',null)">🌊 南部</button>
+        <button class="dropdown-item" onclick="document.querySelector('.nav-dropdown-wrap').classList.remove('open');doNav('diary');filterDiaries('東部',null)">🌿 東部</button>
+        <button class="dropdown-item" onclick="document.querySelector('.nav-dropdown-wrap').classList.remove('open');doNav('diary');filterDiaries('全部',null)">📋 全部</button>
       </div>
     </div>
   </nav>
@@ -587,7 +641,10 @@ let editingId={place:null,member:null,diary:null};
 let currentDiaryFilter='全部';
 
 // ══ GIST 雲端同步 ══
-let GIST_ID = localStorage.getItem('bagel_gist_id') || '';
+// 預設公開 Gist ID — 訪客不需填寫任何東西即可自動讀取最新資料
+// 編輯者請把這裡換成你自己建立的 Gist ID
+const DEFAULT_GIST_ID = '00d08df1e3e0409103092c52b6c05fc6';
+let GIST_ID = localStorage.getItem('bagel_gist_id') || DEFAULT_GIST_ID;
 let GIST_TOKEN = localStorage.getItem('bagel_gist_token') || '';
 let syncStatus = 'idle'; // idle | syncing | ok | error
 
@@ -635,19 +692,21 @@ async function gistPull() {
         (remote.places && remote.places.length > 0) ||
         (remote.diaries && remote.diaries.length > 0)
       )){
-        // Only replace local if remote has more or equal data
         const localTotal = data.members.length + data.places.length + data.diaries.length;
         const remoteTotal = (remote.members||[]).length + (remote.places||[]).length + (remote.diaries||[]).length;
-        if(remoteTotal >= localTotal){
+        if(localTotal === 0 || remoteTotal >= localTotal){
+          // New device (local empty) OR remote is newer/equal → use remote
           data = remote;
           saveData();
           renderAll();
-          setSyncStatus('ok', '已載入雲端資料（'+remoteTotal+' 筆）');
+          setSyncStatus('ok', '✅ 已同步雲端資料');
         } else {
-          setSyncStatus('ok', '本地資料較新，未覆蓋');
+          // Local has more data → don't overwrite, but push local to cloud
+          setSyncStatus('ok', '本地資料較新，已推送至雲端');
+          gistPush();
         }
       } else {
-        setSyncStatus('ok', '雲端尚無資料，保留本地');
+        setSyncStatus('ok', '雲端尚無資料');
       }
     } else {
       setSyncStatus('ok', '雲端尚無資料');
@@ -720,6 +779,19 @@ function toggleEditMode(){
 function closePwModal(){document.getElementById('pw-modal-overlay').classList.remove('show');}
 
 // ══ NAV ══
+function toggleDiaryDropdown(e){
+  e.stopPropagation();
+  const wrap=document.querySelector('.nav-dropdown-wrap');
+  const isOpen=wrap.classList.contains('open');
+  wrap.classList.toggle('open',!isOpen);
+  // Close on outside click
+  if(!isOpen){
+    setTimeout(()=>document.addEventListener('click',function closeDd(){
+      wrap.classList.remove('open');
+      document.removeEventListener('click',closeDd);
+    },{once:true}),0);
+  }
+}
 function doNav(v){
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(el=>el.classList.remove('active'));
@@ -1244,12 +1316,15 @@ function deleteDiary(id){
 function renderAll(){renderHome();renderMembers();renderDiaries();renderPlaceList();}
 
 loadData();
-// Auto-pull from Gist ONLY if we already have local data
-// (prevents empty Gist from wiping fresh demo data)
-if(GIST_ID && (data.members.length > 0 || data.places.length > 0)){
-  setTimeout(()=>gistPull(), 800);
-}
-if(data.members.length===0&&data.places.length===0){
+// Sync logic:
+// - Local empty + Gist configured → pull from Gist (new device)
+// - Local has data + Gist configured → pull only if remote has more (update)
+// - No Gist → load demo data if empty
+if(GIST_ID){
+  // Always try to pull when Gist is configured
+  setTimeout(()=>gistPull(), 600);
+} 
+if(data.members.length===0&&data.places.length===0&&!GIST_ID){
   const mA={id:'demo-m1',name:'小圓',color:'#7A9E7E',tagline:'只要有咖啡，走到哪都行',bio:'喜歡在城市裡漫無目的地走，然後意外找到超棒的店。不吃香菜，對甜點永遠有空間。',prefs:'咖啡控, 甜點獵人, 不吃香菜, 愛逛二手書店',avatar:null};
   const mB={id:'demo-m2',name:'阿橘',color:'#C4956A',tagline:'路線規劃交給我，但我可能帶你迷路',bio:'出發前瘋狂做功課、到了現場全部臨時改變的那種人。喜歡爬山跟老街，對網美景點沒什麼抵抗力。',prefs:'愛爬山, 老街控, 拍照狂, 辣食愛好者',avatar:null};
   const mC={id:'demo-m3',name:'貝貝',color:'#9B7EBD',tagline:'旅行就是要吃好睡好花大錢',bio:'覺得旅行不該將就，住宿和餐廳都要仔細挑選。精通踩雷報告撰寫，已幫貝果們避開無數個地雷。',prefs:'精品住宿, 米其林追蹤者, 嚴格評分派, 不愛排隊',avatar:null};
@@ -1297,19 +1372,20 @@ renderAll();
   <div class="modal" style="max-width:480px;">
     <h3>☁️ 雲端同步設定</h3>
     <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:1.25rem;line-height:1.7;">
-      使用 GitHub Gist 同步資料，讓所有裝置都能讀取最新內容。<br>
-      儲存後每次編輯會自動推送，開啟網站時自動拉取最新資料。
+      使用 GitHub Gist 同步資料。<br>
+      <strong>一般訪客</strong>只需填 Gist ID 即可自動讀取最新資料。<br>
+      <strong>編輯者</strong>另需填 Token 才能推送編輯內容。
     </p>
     <div class="form-group">
-      <label class="form-label">Gist ID</label>
+      <label class="form-label">Gist ID <span style="color:var(--green);font-size:0.7rem;">（所有人填）</span></label>
       <input type="text" class="form-input" id="sync-gist-id" placeholder="例：a1b2c3d4e5f6...">
       <p style="font-size:0.71rem;color:var(--text-muted);margin-top:0.3rem;">
         前往 <a href="https://gist.github.com" target="_blank" style="color:var(--green);">gist.github.com</a> 新建一個 Public Gist，把網址最後那串 ID 貼上來
       </p>
     </div>
     <div class="form-group">
-      <label class="form-label">GitHub Personal Access Token</label>
-      <input type="password" class="form-input" id="sync-gist-token" placeholder="ghp_xxxxxxxxxxxx">
+      <label class="form-label">GitHub Token <span style="color:var(--brown);font-size:0.7rem;">（僅編輯者需要）</span></label>
+      <input type="password" class="form-input" id="sync-gist-token" placeholder="ghp_xxxxxxxxxxxx（不填則唯讀）">
       <p style="font-size:0.71rem;color:var(--text-muted);margin-top:0.3rem;">
         GitHub → Settings → Developer settings → Personal access tokens → 勾選 <strong>gist</strong> 權限
       </p>
