@@ -683,7 +683,7 @@ textarea.form-input{resize:vertical;min-height:80px;}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 // ══ DATA ══
-const STORAGE_KEY='bagel_v6';
+const STORAGE_KEY='bagel_v7';
 const PW_HASH_KEY='bagel_pw';
 const DEFAULT_PW_HASH='ad7de7f33a2d0d86643b20f8d7b0a8009709c1d91b4baee8cb88d6f848af412f';
 let data={members:[],places:[],diaries:[]};
@@ -1435,15 +1435,21 @@ function deleteDiary(id){
 function renderAll(){renderHome();renderMembers();renderDiaries();renderPlaceList();}
 
 loadData();
-// Sync logic:
-// - Local empty + Gist configured → pull from Gist (new device)
-// - Local has data + Gist configured → pull only if remote has more (update)
-// - No Gist → load demo data if empty
-if(GIST_ID){
-  // Always try to pull when Gist is configured
-  setTimeout(()=>gistPull(), 600);
-} 
-if(data.members.length===0&&data.places.length===0&&!GIST_ID){
+
+async function initialSync(){
+  if(GIST_ID){
+    // 有設定 Gist：一定要先把雲端資料抓回來，不可以在這之前載入 demo 資料
+    // （避免 demo 資料的時間戳記比雲端真實資料更新，導致同步判斷錯誤）
+    await gistPull();
+  }
+  // 只有在「完全沒有 Gist」且本地也沒資料時，才載入展示用的 demo 資料
+  if(data.members.length===0 && data.places.length===0 && !GIST_ID){
+    loadDemoData();
+  }
+  renderAll();
+}
+
+function loadDemoData(){
   const mA={id:'demo-m1',name:'小圓',color:'#7A9E7E',tagline:'只要有咖啡，走到哪都行',bio:'喜歡在城市裡漫無目的地走，然後意外找到超棒的店。不吃香菜，對甜點永遠有空間。',prefs:'咖啡控, 甜點獵人, 不吃香菜, 愛逛二手書店',avatar:null};
   const mB={id:'demo-m2',name:'阿橘',color:'#C4956A',tagline:'路線規劃交給我，但我可能帶你迷路',bio:'出發前瘋狂做功課、到了現場全部臨時改變的那種人。喜歡爬山跟老街，對網美景點沒什麼抵抗力。',prefs:'愛爬山, 老街控, 拍照狂, 辣食愛好者',avatar:null};
   const mC={id:'demo-m3',name:'貝貝',color:'#9B7EBD',tagline:'旅行就是要吃好睡好花大錢',bio:'覺得旅行不該將就，住宿和餐廳都要仔細挑選。精通踩雷報告撰寫，已幫貝果們避開無數個地雷。',prefs:'精品住宿, 米其林追蹤者, 嚴格評分派, 不愛排隊',avatar:null};
@@ -1480,9 +1486,10 @@ if(data.members.length===0&&data.places.length===0&&!GIST_ID){
   data.members=[mA,mB,mC];
   data.places=[pA,pB,pC,pD,pE];
   data.diaries=[diary1,diary2,diary3];
-  saveData();
+  data._updatedAt = 1; // 範例資料時間戳記設為最舊，任何真實編輯都會覆蓋它
+  saveData(true, true); // 跳過推送（demo資料不該推上雲端）+ 跳過蓋時間戳記
 }
-renderAll();
+initialSync();
 
 
 </script>
