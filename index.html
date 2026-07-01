@@ -20,13 +20,13 @@
 body{font-family:'Noto Sans TC',sans-serif;background:var(--cream);color:var(--text);min-height:100vh;}
 
 /* HEADER */
-header{background:var(--white);border-bottom:2px solid var(--cream-deep);padding:0 2rem;position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;height:64px;}
+header{background:var(--white);border-bottom:2px solid var(--cream-deep);padding:0 2rem;position:sticky;top:0;z-index:1000;display:flex;align-items:center;justify-content:space-between;height:64px;}
 .site-logo{font-family:'Noto Serif TC',serif;font-size:1.2rem;font-weight:600;color:var(--text);display:flex;align-items:center;gap:0.5rem;cursor:pointer;}
 nav{display:flex;gap:0.15rem;align-items:center;}
 .nav-btn{background:none;border:none;font-family:'Noto Sans TC',sans-serif;font-size:0.875rem;color:var(--text-light);padding:0.4rem 0.85rem;border-radius:20px;cursor:pointer;transition:all 0.2s;position:relative;z-index:1;}
 .nav-btn:hover,.nav-btn.active{background:var(--green-pale);color:var(--green);font-weight:500;}
 .nav-dropdown-wrap{position:relative;}
-.nav-dropdown{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--white);border:1.5px solid var(--cream-deep);border-radius:14px;box-shadow:0 6px 20px var(--shadow);min-width:140px;padding:0.4rem;display:none;flex-direction:column;gap:0.15rem;z-index:200;}
+.nav-dropdown{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--white);border:1.5px solid var(--cream-deep);border-radius:14px;box-shadow:0 6px 20px var(--shadow);min-width:140px;padding:0.4rem;display:none;flex-direction:column;gap:0.15rem;z-index:1100;}
 .nav-dropdown-wrap:hover .nav-dropdown{display:flex;}
 .nav-dropdown-wrap.open .nav-dropdown{display:flex;}
 .dropdown-item{background:none;border:none;font-family:'Noto Sans TC',sans-serif;font-size:0.82rem;color:var(--text-light);padding:0.45rem 0.85rem;border-radius:10px;cursor:pointer;text-align:left;transition:all 0.15s;}
@@ -1438,13 +1438,14 @@ loadData();
 
 async function initialSync(){
   if(GIST_ID){
-    // 有設定 Gist：一定要先把雲端資料抓回來，不可以在這之前載入 demo 資料
-    // （避免 demo 資料的時間戳記比雲端真實資料更新，導致同步判斷錯誤）
     await gistPull();
   }
-  // 只有在「完全沒有 Gist」且本地也沒資料時，才載入展示用的 demo 資料
-  if(data.members.length===0 && data.places.length===0 && !GIST_ID){
-    loadDemoData();
+  // 載入 demo 資料的條件：本地空 AND（沒有設 Gist，OR Gist 也空著）
+  if(data.members.length===0 && data.places.length===0){
+    if(!GIST_ID){
+      loadDemoData();
+    }
+    // 有 Gist 但也是空的 → 頁面空白，等使用者自己新增資料
   }
   renderAll();
 }
