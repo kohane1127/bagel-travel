@@ -1161,6 +1161,13 @@ function renderPlaceList(filter){
       +'<div class="place-card-header"><div class="place-name">'+p.name+'</div>'+(p.type?'<span class="place-type">'+p.type+'</span>':'')+'</div>'
       +((p.county||p.location)?'<div class="place-location">📍 '+(p.county||'')+(p.location?' · '+p.location:'')+'</div>':'')
       +'<div class="avg-stars"><span class="stars-display">'+(avg?starsStr(Math.round(avg)):'☆☆☆☆☆')+'</span><span class="avg-score">'+(avg||'尚無評價')+'</span></div>'
+      +((p.reviews||[]).length>0?'<div class="stop-reviews" style="margin:0.4rem 0;">'+p.reviews.map((r,ri)=>'<div class="stop-review-row">'
+        +'<div class="stop-reviewer-chip"><div class="chip-dot" style="background:'+memberColor(r.memberId)+'"></div>'
+        +'<span class="chip-name">'+memberName(r.memberId)+'</span>'
+        +'<span class="chip-stars">'+starsStr(r.stars)+'</span></div>'
+        +(r.comment?'<span>'+r.comment+'</span>':'')
+        +(editMode?'<button class="btn-sm btn-delete-sm" style="margin-left:auto;flex-shrink:0;" data-action="delplacereview" data-pid="'+p.id+'" data-ri="'+ri+'">✕</button>':'')
+        +'</div>').join('')+'</div>':'')
       +'<div class="edit-actions" data-pid="'+p.id+'">'
       +'<button class="btn-sm btn-edit-sm" data-action="edit" data-pid="'+p.id+'">✏️ 編輯</button>'
       +'<button class="btn-sm btn-delete-sm" data-action="del" data-pid="'+p.id+'">🗑 刪除</button>'
@@ -1177,6 +1184,11 @@ function renderPlaceList(filter){
       if(btn.dataset.action==='edit')openEditPlace(pid);
       else if(btn.dataset.action==='del')deletePlace(pid);
       else if(btn.dataset.action==='review')openAddReview(pid,null,null);
+      else if(btn.dataset.action==='delplacereview'){
+        const ri=parseInt(btn.dataset.ri);
+        const p=data.places.find(x=>x.id===pid);
+        if(p&&p.reviews){p.reviews.splice(ri,1);saveData();renderPlaceList();renderOsmMarkers();}
+      }
       return;
     }
     const card=e.target.closest('.place-card[data-pid]');
@@ -1419,6 +1431,12 @@ function renderDiaryList(tag){
       else if(btn.dataset.action==='reviewstop'){
         const {did,si}=btn.dataset;
         openAddReview(null,did,parseInt(si));
+      }else if(btn.dataset.action==='delreview'){
+        const d=data.diaries.find(x=>x.id===btn.dataset.did);
+        if(d&&d.stops[parseInt(btn.dataset.si)]){
+          d.stops[parseInt(btn.dataset.si)].reviews.splice(parseInt(btn.dataset.ri),1);
+          saveData();renderDiaries();
+        }
       }
     }
   };
@@ -1431,11 +1449,13 @@ function renderTimelineStop(s,diaryId,si){
     +'<div class="timeline-stop-name">'+s.name+'</div>'
     +(s.type?'<div class="timeline-stop-type">'+typeEmoji(s.type)+' '+s.type+'</div>':'')
     +'<div class="stop-reviews">'
-    +reviews.map(r=>'<div class="stop-review-row">'
+    +reviews.map((r,ri)=>'<div class="stop-review-row">'
       +'<div class="stop-reviewer-chip"><div class="chip-dot" style="background:'+memberColor(r.memberId)+'"></div>'
       +'<span class="chip-name">'+memberName(r.memberId)+'</span>'
       +'<span class="chip-stars">'+starsStr(r.stars)+'</span></div>'
-      +(r.comment?'<span>'+r.comment+'</span>':'')+'</div>').join('')
+      +(r.comment?'<span>'+r.comment+'</span>':'')
+      +(editMode?'<button class="btn-sm btn-delete-sm" style="margin-left:auto;flex-shrink:0;" data-action="delreview" data-did="'+diaryId+'" data-si="'+si+'" data-ri="'+ri+'">✕</button>':'')
+      +'</div>').join('')
     +(reviews.length===0?'<span style="font-size:0.72rem;color:var(--text-muted);">尚無評價</span>':'')
     +'</div>'
     +(editMode?'<button class="diary-add-review-btn" data-action="reviewstop" data-did="'+diaryId+'" data-si="'+si+'">＋ 新增評價</button>':'')
