@@ -671,6 +671,7 @@ textarea.form-input{resize:vertical;min-height:80px;}
     <div class="form-group"><label class="form-label">一句話介紹</label><input type="text" class="form-input" id="mm-tagline"></div>
     <div class="form-group"><label class="form-label">關於我</label><textarea class="form-input" id="mm-bio"></textarea></div>
     <div class="form-group"><label class="form-label">口味／偏好（逗號分隔）</label><input type="text" class="form-input" id="mm-prefs" placeholder="咖啡控, 不吃辣"></div>
+    <div class="form-group"><label class="form-label">個人密碼 <span style="font-size:0.7rem;color:var(--text-muted);">（用於填寫行程心得，留空則不變）</span></label><input type="password" class="form-input" id="mm-pw" placeholder="輸入新密碼或留空保持不變"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeMemberModal()">取消</button>
       <button class="btn-save" onclick="saveMember()">儲存</button>
@@ -1184,10 +1185,13 @@ function renderPlaceList(filter){
         +(r.comment?'<span style="white-space:pre-wrap;">'+r.comment+'</span>':'')
         +(editMode&&r._fromPlace!==false?'<button class="btn-sm btn-delete-sm" style="margin-left:auto;flex-shrink:0;" data-action="delplacereview" data-pid="'+p.id+'" data-ri="'+ri+'">✕</button>':'')
         +'</div>').join('')+'</div>':'')
+      +'<div style="display:flex;gap:0.4rem;margin-top:0.5rem;flex-wrap:wrap;">'
+      +'<button class="btn-sm" style="background:var(--brown-pale);color:var(--brown);" data-action="prreview" data-pid="'+p.id+'">⭐ 我的評分</button>'
+      +'</div>'
       +'<div class="edit-actions" data-pid="'+p.id+'">'
       +'<button class="btn-sm btn-edit-sm" data-action="edit" data-pid="'+p.id+'">✏️ 編輯</button>'
       +'<button class="btn-sm btn-delete-sm" data-action="del" data-pid="'+p.id+'">🗑 刪除</button>'
-      +'<button class="btn-sm btn-edit-sm" data-action="review" data-pid="'+p.id+'">⭐ 評價</button>'
+      +'<button class="btn-sm btn-edit-sm" data-action="review" data-pid="'+p.id+'">⭐ 管理員評分</button>'
       +'</div>'
       +'</div>';
   }).join('');
@@ -1204,6 +1208,8 @@ function renderPlaceList(filter){
         const ri=parseInt(btn.dataset.ri);
         const p=data.places.find(x=>x.id===pid);
         if(p&&p.reviews){p.reviews.splice(ri,1);saveData();renderPlaceList();renderOsmMarkers();}
+      }else if(btn.dataset.action==='prreview'){
+        openPrModal(pid, null, null);
       }
       return;
     }
@@ -1333,7 +1339,7 @@ function renderMembers(){
 function openAddMember(){
   editingId.member=null;
   document.getElementById('member-modal-title').textContent='新增貝果成員';
-  ['mm-name','mm-tagline','mm-bio','mm-prefs'].forEach(id=>document.getElementById(id).value='');
+  ['mm-name','mm-tagline','mm-bio','mm-prefs','mm-pw'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('mm-color').value='#7A9E7E';
   document.getElementById('member-modal-overlay').classList.add('show');
 }
@@ -1346,15 +1352,27 @@ function openEditMember(id){
   document.getElementById('mm-bio').value=m.bio||'';
   document.getElementById('mm-prefs').value=m.prefs||'';
   document.getElementById('mm-color').value=m.color||'#7A9E7E';
+  document.getElementById('mm-pw').value=''; // 留空=不變更密碼
   document.getElementById('member-modal-overlay').classList.add('show');
 }
 function closeMemberModal(){document.getElementById('member-modal-overlay').classList.remove('show');}
-function saveMember(){
+async function saveMember(){
   const name=document.getElementById('mm-name').value.trim();
   if(!name)return alert('請輸入名稱');
   const obj={name,tagline:document.getElementById('mm-tagline').value.trim(),bio:document.getElementById('mm-bio').value.trim(),prefs:document.getElementById('mm-prefs').value.trim(),color:document.getElementById('mm-color').value.trim()||'#7A9E7E'};
-  if(editingId.member){const m=data.members.find(x=>x.id===editingId.member);if(m){const av=m.avatar;Object.assign(m,obj);m.avatar=av;}}
-  else data.members.push({id:uid(),avatar:null,...obj});
+  const pwVal=document.getElementById('mm-pw').value;
+  if(editingId.member){
+    const m=data.members.find(x=>x.id===editingId.member);
+    if(m){
+      const av=m.avatar; const oldPwHash=m.pwHash;
+      Object.assign(m,obj);
+      m.avatar=av;
+      m.pwHash=pwVal?await sha256(pwVal):oldPwHash;
+    }
+  }else{
+    const newM={id:uid(),avatar:null,pwHash:pwVal?await sha256(pwVal):null,...obj};
+    data.members.push(newM);
+  }
   saveData();closeMemberModal();renderMembers();
 }
 function deleteMember(id){
@@ -1425,10 +1443,11 @@ function renderDiaryList(tag){
       +'<div class="diary-header">'
       +'<div class="diary-date-block"><div class="diary-date-month">'+(dt.getMonth()+1)+'月</div><div class="diary-date-day">'+dt.getDate()+'</div></div>'
       +'<div class="diary-title-area"><div class="diary-title">'+d.title+'</div><div class="diary-meta"><span>'+dt.getFullYear()+'年</span><span>'+stops.length+' 個地點</span></div></div>'
-      +(editMode?'<div style="display:flex;gap:0.35rem;margin-left:auto;flex-shrink:0;">'
-        +'<button class="btn-sm btn-edit-sm" data-action="editd" data-did="'+d.id+'">✏️</button>'
-        +'<button class="btn-sm btn-delete-sm" data-action="deld" data-did="'+d.id+'">🗑</button>'
-        +'</div>':'')
+      +'<div style="display:flex;gap:0.35rem;margin-left:auto;flex-shrink:0;align-items:center;">'
+      +'<button class="btn-sm btn-edit-sm" data-action="addnote" data-did="'+d.id+'" style="background:var(--brown-pale);color:var(--brown);">✍️ 心得</button>'
+      +(editMode?'<button class="btn-sm btn-edit-sm" data-action="editd" data-did="'+d.id+'">✏️</button>'
+        +'<button class="btn-sm btn-delete-sm" data-action="deld" data-did="'+d.id+'">🗑</button>':'')
+      +'</div>'
       +'</div>'
       // Trip-level notes
       +(Object.keys(d.notes||{}).length>0?'<div class="diary-notes">'+Object.entries(d.notes||{}).map(([mid,note])=>{
@@ -1474,7 +1493,8 @@ function renderTimelineStop(s,diaryId,si){
       +'</div>').join('')
     +(reviews.length===0?'<span style="font-size:0.72rem;color:var(--text-muted);">尚無評價</span>':'')
     +'</div>'
-    +(editMode?'<button class="diary-add-review-btn" data-action="reviewstop" data-did="'+diaryId+'" data-si="'+si+'">＋ 新增評價</button>':'')
+    +'<button class="diary-add-review-btn" data-action="prreviewstop" data-did="'+diaryId+'" data-si="'+si+'" style="background:var(--brown-pale);color:var(--brown);">⭐ 我的評分</button>'
+    +(editMode?'<button class="diary-add-review-btn" data-action="reviewstop" data-did="'+diaryId+'" data-si="'+si+'">＋ 新增評價（管理員）</button>':'')
     +'</div></div>';
 }
 function openAddDiary(){
@@ -1548,6 +1568,197 @@ function deleteDiary(id){
   saveData();renderDiaries();renderHome();
 }
 
+
+
+// ══ PERSONAL REVIEW (個人密碼評分) ══
+let prTargetPlaceId = null;
+let prTargetDiaryId = null;
+let prTargetStopIdx = null;
+let prAuthedMemberId = null;
+let prCurrentStars = 0;
+
+function openPrModal(placeId, diaryId, stopIdx){
+  prTargetPlaceId = placeId;
+  prTargetDiaryId = diaryId;
+  prTargetStopIdx = stopIdx;
+  prAuthedMemberId = null;
+  prCurrentStars = 0;
+
+  // Reset UI
+  document.getElementById('pr-pw-error').style.display='none';
+  document.getElementById('pr-pw-input').value='';
+  document.getElementById('pr-form-section').style.display='none';
+  document.getElementById('pr-verify-btn').style.display='inline-block';
+  document.getElementById('pr-save-btn').style.display='none';
+  document.getElementById('pr-comment').value='';
+  document.querySelectorAll('#pr-stars .star-btn').forEach(b=>b.classList.remove('lit'));
+
+  // Populate member select (members with pwHash)
+  const eligible = data.members.filter(m=>m.pwHash);
+  if(eligible.length===0){
+    alert('目前沒有設定個人密碼的成員，請管理員先設定。');
+    return;
+  }
+  document.getElementById('pr-member-select').innerHTML =
+    eligible.map(m=>'<option value="'+m.id+'">'+m.name+'</option>').join('');
+
+  // Title
+  let title = '新增評分';
+  if(placeId){
+    const p=data.places.find(x=>x.id===placeId);
+    if(p) title = '評分 ｜ '+p.name;
+  } else if(diaryId!==null && stopIdx!==null){
+    const d=data.diaries.find(x=>x.id===diaryId);
+    if(d&&d.stops[stopIdx]) title = '評分 ｜ '+d.stops[stopIdx].name;
+  }
+  document.getElementById('pr-modal-title').textContent = title;
+  document.getElementById('personal-review-modal-overlay').classList.add('show');
+  setTimeout(()=>document.getElementById('pr-pw-input').focus(),100);
+}
+
+async function verifyPrAuth(){
+  const mid = document.getElementById('pr-member-select').value;
+  const pw = document.getElementById('pr-pw-input').value;
+  const m = data.members.find(x=>x.id===mid);
+  if(!m||!m.pwHash){document.getElementById('pr-pw-error').style.display='block';return;}
+  const hash = await sha256(pw);
+  if(hash !== m.pwHash){
+    document.getElementById('pr-pw-error').style.display='block';
+    document.getElementById('pr-pw-input').value='';
+    return;
+  }
+  prAuthedMemberId = mid;
+  document.getElementById('pr-pw-error').style.display='none';
+  document.getElementById('pr-form-section').style.display='block';
+  document.getElementById('pr-verify-btn').style.display='none';
+  document.getElementById('pr-save-btn').style.display='inline-block';
+
+  // Wire star buttons
+  document.querySelectorAll('#pr-stars .star-btn').forEach(btn=>{
+    btn.onclick=function(){
+      prCurrentStars=parseInt(this.dataset.s);
+      document.querySelectorAll('#pr-stars .star-btn').forEach((b,i)=>b.classList.toggle('lit',i<prCurrentStars));
+    };
+  });
+}
+
+function savePrReview(){
+  if(!prAuthedMemberId) return;
+  if(prCurrentStars===0) return alert('請選擇星級');
+  const review={id:uid(),memberId:prAuthedMemberId,stars:prCurrentStars,comment:document.getElementById('pr-comment').value.trim()};
+  if(prTargetPlaceId){
+    const p=data.places.find(x=>x.id===prTargetPlaceId);
+    if(p){if(!p.reviews)p.reviews=[];p.reviews.push(review);}
+    saveData();closePrModal();renderPlaceList();renderOsmMarkers();
+  } else if(prTargetDiaryId!==null && prTargetStopIdx!==null){
+    const d=data.diaries.find(x=>x.id===prTargetDiaryId);
+    if(d&&d.stops[prTargetStopIdx]){
+      if(!d.stops[prTargetStopIdx].reviews)d.stops[prTargetStopIdx].reviews=[];
+      d.stops[prTargetStopIdx].reviews.push(review);
+    }
+    saveData();closePrModal();renderDiaries();
+  }
+}
+
+function closePrModal(){
+  document.getElementById('personal-review-modal-overlay').classList.remove('show');
+  prTargetPlaceId=null;prTargetDiaryId=null;prTargetStopIdx=null;prAuthedMemberId=null;
+}
+
+// ══ PERSONAL NOTES (per-member, per-diary) ══
+let noteTargetDiaryId = null;
+let noteAuthedMemberId = null;
+
+function openNoteModal(diaryId){
+  noteTargetDiaryId = diaryId;
+  noteAuthedMemberId = null;
+  document.getElementById('note-pw-error').style.display='none';
+  document.getElementById('note-pw-input').value='';
+  document.getElementById('note-textarea-wrap').style.display='none';
+  document.getElementById('note-verify-btn').style.display='inline-block';
+  document.getElementById('note-save-btn').style.display='none';
+
+  // Populate member select
+  const d = data.diaries.find(x=>x.id===diaryId);
+  const memberIds = d ? (d.memberIds||[]) : data.members.map(m=>m.id);
+  const eligible = data.members.filter(m=>memberIds.includes(m.id) && m.pwHash);
+  if(eligible.length===0){
+    alert('此行程沒有設定個人密碼的成員，請管理員先在「關於貝果」編輯成員並設定密碼。');
+    return;
+  }
+  const sel = document.getElementById('note-member-select');
+  sel.innerHTML = eligible.map(m=>'<option value="'+m.id+'">'+m.name+'</option>').join('');
+
+  // Pre-fill textarea if existing note
+  const existingNote = (d&&d.notes&&d.notes[sel.value])||'';
+  document.getElementById('note-textarea').value = existingNote;
+
+  const d2 = data.diaries.find(x=>x.id===diaryId);
+  document.getElementById('note-modal-title').textContent = '填寫行程心得 ｜ '+(d2?d2.title:'');
+  document.getElementById('note-modal-overlay').classList.add('show');
+  setTimeout(()=>document.getElementById('note-pw-input').focus(),100);
+}
+
+async function verifyNoteAuth(){
+  const mid = document.getElementById('note-member-select').value;
+  const pw = document.getElementById('note-pw-input').value;
+  const m = data.members.find(x=>x.id===mid);
+  if(!m||!m.pwHash){document.getElementById('note-pw-error').style.display='block';return;}
+  const hash = await sha256(pw);
+  if(hash !== m.pwHash){
+    document.getElementById('note-pw-error').style.display='block';
+    document.getElementById('note-pw-input').value='';
+    return;
+  }
+  // Auth passed
+  noteAuthedMemberId = mid;
+  document.getElementById('note-pw-error').style.display='none';
+  document.getElementById('note-pw-input').value='';
+  document.getElementById('note-textarea-wrap').style.display='block';
+  document.getElementById('note-verify-btn').style.display='none';
+  document.getElementById('note-save-btn').style.display='inline-block';
+  // Load existing note
+  const d = data.diaries.find(x=>x.id===noteTargetDiaryId);
+  document.getElementById('note-textarea').value = (d&&d.notes&&d.notes[mid])||'';
+  setTimeout(()=>document.getElementById('note-textarea').focus(),100);
+}
+
+function saveNote(){
+  if(!noteAuthedMemberId||!noteTargetDiaryId)return;
+  const d = data.diaries.find(x=>x.id===noteTargetDiaryId);
+  if(!d)return;
+  if(!d.notes)d.notes={};
+  const txt = document.getElementById('note-textarea').value.trim();
+  if(txt) d.notes[noteAuthedMemberId]=txt;
+  else delete d.notes[noteAuthedMemberId];
+  saveData();
+  closeNoteModal();
+  renderDiaries();
+}
+
+function closeNoteModal(){
+  document.getElementById('note-modal-overlay').classList.remove('show');
+  noteTargetDiaryId=null;
+  noteAuthedMemberId=null;
+}
+
+// Update note-member-select to reload textarea when member changes
+document.addEventListener('DOMContentLoaded',function(){
+  const sel=document.getElementById('note-member-select');
+  if(sel){
+    sel.addEventListener('change',function(){
+      // Reset auth state when switching member
+      if(noteAuthedMemberId){
+        noteAuthedMemberId=null;
+        document.getElementById('note-textarea-wrap').style.display='none';
+        document.getElementById('note-verify-btn').style.display='inline-block';
+        document.getElementById('note-save-btn').style.display='none';
+        document.getElementById('note-pw-input').value='';
+      }
+    });
+  }
+});
+
 function renderAll(){renderHome();renderMembers();renderDiaries();renderPlaceList();}
 
 loadData();
@@ -1610,6 +1821,70 @@ initialSync();
 
 
 </script>
+<!-- PERSONAL NOTE MODAL -->
+<div class="modal-overlay" id="note-modal-overlay">
+  <div class="modal" style="max-width:420px;">
+    <h3 id="note-modal-title">填寫行程心得</h3>
+    <div class="form-group">
+      <label class="form-label">我是</label>
+      <select class="form-input" id="note-member-select"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">個人密碼</label>
+      <input type="password" class="form-input" id="note-pw-input" placeholder="輸入你的個人密碼" onkeydown="if(event.key==='Enter')verifyNoteAuth()">
+      <div id="note-pw-error" style="color:#c0392b;font-size:0.78rem;margin-top:0.35rem;display:none;">密碼不對喔 🥯</div>
+    </div>
+    <div id="note-textarea-wrap" style="display:none;">
+      <div class="form-group">
+        <label class="form-label">心得</label>
+        <textarea class="form-input" id="note-textarea" placeholder="寫下這次旅行的心得…" style="min-height:120px;"></textarea>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeNoteModal()">取消</button>
+      <button class="btn-cancel" id="note-verify-btn" onclick="verifyNoteAuth()">驗證身份</button>
+      <button class="btn-save" id="note-save-btn" style="display:none;" onclick="saveNote()">儲存心得</button>
+    </div>
+  </div>
+</div>
+<!-- PERSONAL REVIEW MODAL -->
+<div class="modal-overlay" id="personal-review-modal-overlay">
+  <div class="modal" style="max-width:420px;">
+    <h3 id="pr-modal-title">新增評分</h3>
+    <div id="pr-auth-section">
+      <div class="form-group">
+        <label class="form-label">我是</label>
+        <select class="form-input" id="pr-member-select"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">個人密碼</label>
+        <input type="password" class="form-input" id="pr-pw-input" placeholder="輸入你的個人密碼" onkeydown="if(event.key==='Enter')verifyPrAuth()">
+        <div id="pr-pw-error" style="color:#c0392b;font-size:0.78rem;margin-top:0.35rem;display:none;">密碼不對喔 🥯</div>
+      </div>
+    </div>
+    <div id="pr-form-section" style="display:none;">
+      <div class="form-group">
+        <label class="form-label">星級</label>
+        <div class="star-picker" id="pr-stars">
+          <button class="star-btn" data-s="1">★</button>
+          <button class="star-btn" data-s="2">★</button>
+          <button class="star-btn" data-s="3">★</button>
+          <button class="star-btn" data-s="4">★</button>
+          <button class="star-btn" data-s="5">★</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">評語</label>
+        <textarea class="form-input" id="pr-comment" placeholder="一句話描述這個地方" style="min-height:80px;"></textarea>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closePrModal()">取消</button>
+      <button class="btn-cancel" id="pr-verify-btn" onclick="verifyPrAuth()">驗證身份</button>
+      <button class="btn-save" id="pr-save-btn" style="display:none;" onclick="savePrReview()">儲存評分</button>
+    </div>
+  </div>
+</div>
 <!-- SYNC SETTINGS MODAL -->
 <div class="modal-overlay" id="sync-modal-overlay">
   <div class="modal" style="max-width:480px;">
