@@ -714,6 +714,7 @@ async function gistPush() {
   if (!GIST_ID || !GIST_TOKEN) return;
   setSyncStatus('syncing', '同步中…');
   const pushPromise = (async () => {
+    // avatar 已在上傳時壓縮至 120×120px JPEG，體積小可以同步
     const payload = JSON.stringify(data);
     try {
       const res = await fetch('https://api.github.com/gists/' + GIST_ID, {
@@ -814,7 +815,7 @@ async function gistPull() {
         const localUpdatedAt = data._updatedAt || 0;
         if(remoteUpdatedAt >= localUpdatedAt){
           data = remote;
-          saveData(true, true); // 跳過推送 + 跳過蓋時間戳記（保留雲端原始時間）
+          saveData(true, true);
           renderAll();
           setSyncStatus('ok', '✅ 已同步雲端資料');
         } else {
@@ -1306,7 +1307,27 @@ function triggerAvatarUpload(mid){document.getElementById('avatar-input-'+mid).c
 function handleAvatarUpload(event,mid){
   const file=event.target.files[0];if(!file)return;
   const reader=new FileReader();
-  reader.onload=e=>{const m=data.members.find(x=>x.id===mid);if(m){m.avatar=e.target.result;saveData();renderMembers();}};
+  reader.onload=e=>{
+    // 壓縮圖片到最大 120×120px，減少 base64 體積
+    const img=new Image();
+    img.onload=()=>{
+      const MAX=120;
+      const scale=Math.min(1, MAX/Math.max(img.width,img.height));
+      const w=Math.round(img.width*scale);
+      const h=Math.round(img.height*scale);
+      const canvas=document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      const compressed=canvas.toDataURL('image/jpeg',0.82);
+      const m=data.members.find(x=>x.id===mid);
+      if(m){
+        m.avatar=compressed;
+        saveData();
+        renderMembers();
+      }
+    };
+    img.src=e.target.result;
+  };
   reader.readAsDataURL(file);
 }
 
