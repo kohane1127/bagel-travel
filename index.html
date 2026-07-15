@@ -850,6 +850,8 @@ async function loadAll(){
     // Re-match currentMember after members are loaded
     if(currentUser){
       currentMember=members.find(m=>m.auth_id===currentUser.id)||null;
+      console.log('[Auth] user:', currentUser.id, 'member:', currentMember?.name||'null');
+      console.log('[Auth] all auth_ids:', members.map(m=>m.name+':'+m.auth_id));
     }
     await initAuth(); // init auth after members are loaded (needed for member matching)
     renderAll();
