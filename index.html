@@ -1472,6 +1472,10 @@ function renderDiaryList(tag){
           d.stops[parseInt(btn.dataset.si)].reviews.splice(parseInt(btn.dataset.ri),1);
           saveData();renderDiaries();
         }
+      }else if(btn.dataset.action==='addnote'){
+        openNoteModal(btn.dataset.did);
+      }else if(btn.dataset.action==='prreviewstop'){
+        openPrModal(null, btn.dataset.did, parseInt(btn.dataset.si));
       }
     }
   };
