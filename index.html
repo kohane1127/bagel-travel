@@ -847,6 +847,10 @@ async function loadAll(){
       sbGet('trip_notes','?order=updated_at'),
     ]);
     setSyncStatus('ok','✅ 已載入');
+    // Re-match currentMember after members are loaded
+    if(currentUser){
+      currentMember=members.find(m=>m.auth_id===currentUser.id)||null;
+    }
     await initAuth(); // init auth after members are loaded (needed for member matching)
     renderAll();
   }catch(e){
@@ -1098,7 +1102,7 @@ function renderPlaceList(filter){
       +(isLoggedIn()?'<div style="display:flex;gap:0.4rem;margin-top:0.5rem;flex-wrap:wrap;">'
       +'<button class="btn-sm" style="background:var(--brown-pale);color:var(--brown);" data-action="prreview" data-pid="'+loc.id+'">⭐ 我的評分</button>'
       +'</div>':'')
-      +((editMode&&(currentUser&&(currentUser.id===ADMIN_UID||loc.created_by===currentUser.id)))?
+      +((currentUser&&(currentUser.id===ADMIN_UID||loc.created_by===currentUser.id))?
         '<div class="edit-actions" data-pid="'+loc.id+'">'
         +'<button class="btn-sm btn-edit-sm" data-action="edit" data-pid="'+loc.id+'">✏️ 編輯</button>'
         +(currentUser&&(currentUser.id===ADMIN_UID||loc.created_by===currentUser.id)?'<button class="btn-sm btn-delete-sm" data-action="del" data-pid="'+loc.id+'">🗑 刪除</button>':'')
@@ -1268,9 +1272,10 @@ function renderMembers(){
       +(prefs.length?'<div class="member-prefs">'+prefs.map(p=>'<span class="pref-tag">'+p+'</span>').join('')+'</div>':'')
       +'<div class="member-stats"><div class="member-stat-n">'+rc+'</div><div class="member-stat-l">則評價</div></div>'
       +(!isAdmin()&&currentMember&&currentMember.id===m.id?'<div style="margin-top:0.5rem;"><button class="btn-sm btn-edit-sm" data-action="editm" data-mid="'+m.id+'">✏️ 編輯我的資料</button></div>':'')
-      +'<div class="edit-actions">'
+      +(isAdmin()?'<div class="edit-actions">'
       +'<button class="btn-sm btn-edit-sm" data-action="editm" data-mid="'+m.id+'">✏️ 編輯</button>'
       +'<button class="btn-sm btn-delete-sm" data-action="delm" data-mid="'+m.id+'">🗑 刪除</button>'
+      +'</div>':'')
       +'</div></div>';
   }).join('');
   grid.onclick=function(e){
