@@ -1095,9 +1095,9 @@ function renderPlaceList(filter){
         +(r.comment?'<span style="white-space:pre-wrap;">'+r.comment+'</span>':'')
         +(editMode?'<button class="btn-sm btn-delete-sm" style="margin-left:auto;flex-shrink:0;" data-action="delrating" data-rid="'+r.id+'" data-locid="'+loc.id+'">✕</button>':'')
         +'</div>').join('')+'</div>':'')
-      +'<div style="display:flex;gap:0.4rem;margin-top:0.5rem;flex-wrap:wrap;">'
+      +(isLoggedIn()?'<div style="display:flex;gap:0.4rem;margin-top:0.5rem;flex-wrap:wrap;">'
       +'<button class="btn-sm" style="background:var(--brown-pale);color:var(--brown);" data-action="prreview" data-pid="'+loc.id+'">⭐ 我的評分</button>'
-      +'</div>'
+      +'</div>':'')
       +((editMode&&(currentUser&&(currentUser.id===ADMIN_UID||loc.created_by===currentUser.id)))?
         '<div class="edit-actions" data-pid="'+loc.id+'">'
         +'<button class="btn-sm btn-edit-sm" data-action="edit" data-pid="'+loc.id+'">✏️ 編輯</button>'
@@ -1267,6 +1267,7 @@ function renderMembers(){
       +(m.bio?'<div class="member-bio">'+m.bio+'</div>':'')
       +(prefs.length?'<div class="member-prefs">'+prefs.map(p=>'<span class="pref-tag">'+p+'</span>').join('')+'</div>':'')
       +'<div class="member-stats"><div class="member-stat-n">'+rc+'</div><div class="member-stat-l">則評價</div></div>'
+      +(!isAdmin()&&currentMember&&currentMember.id===m.id?'<div style="margin-top:0.5rem;"><button class="btn-sm btn-edit-sm" data-action="editm" data-mid="'+m.id+'">✏️ 編輯我的資料</button></div>':'')
       +'<div class="edit-actions">'
       +'<button class="btn-sm btn-edit-sm" data-action="editm" data-mid="'+m.id+'">✏️ 編輯</button>'
       +'<button class="btn-sm btn-delete-sm" data-action="delm" data-mid="'+m.id+'">🗑 刪除</button>'
@@ -1420,14 +1421,14 @@ function renderDiaryList(tag){
       +'<div class="diary-date-block"><div class="diary-date-month">'+(dt.getMonth()+1)+'月</div><div class="diary-date-day">'+dt.getDate()+'</div></div>'
       +'<div class="diary-title-area"><div class="diary-title">'+d.title+'</div><div class="diary-meta"><span>'+dt.getFullYear()+'年</span><span>'+tls.length+' 個地點</span></div></div>'
       +'<div style="display:flex;gap:0.35rem;margin-left:auto;flex-shrink:0;align-items:center;">'
-      +'<button class="btn-sm btn-edit-sm" data-action="addnote" data-did="'+d.id+'" style="background:var(--brown-pale);color:var(--brown);">✍️ 心得</button>'
-      +(editMode?'<button class="btn-sm btn-edit-sm" data-action="editd" data-did="'+d.id+'">✏️</button>'
+      +(isLoggedIn()?'<button class="btn-sm btn-edit-sm" data-action="addnote" data-did="'+d.id+'" style="background:var(--brown-pale);color:var(--brown);">✍️ 心得</button>':'')
+      +(isAdmin()?'<button class="btn-sm btn-edit-sm" data-action="editd" data-did="'+d.id+'">✏️</button>'
         +'<button class="btn-sm btn-delete-sm" data-action="deld" data-did="'+d.id+'">🗑</button>':'')
       +'</div>'
       +'</div>'
       +((d.tags||[]).length?'<div class="diary-tags">'+d.tags.map(t=>'<span class="diary-tag">'+t+'</span>').join('')+'</div>':'')
       +(memberIds.length?'<div class="diary-members-row"><span style="margin-right:0.25rem;">參與：</span>'+memberIds.map(mid=>'<span class="member-pill"><span class="pill-dot" style="background:'+memberColor(mid)+'"></span>'+memberName(mid)+'</span>').join('')+'</div>':'')
-      +(notes.length?'<div class="diary-notes">'+notes.map(n=>'<div class="diary-note-row"><span class="diary-note-dot" style="background:'+memberColor(n.member_id)+'"></span><span class="diary-note-name">'+memberName(n.member_id)+'</span><span style="white-space:pre-wrap;">'+n.content+'</span>'+(editMode?'<button class="btn-sm btn-delete-sm" data-action="delnote" data-nid="'+n.id+'">✕</button>':'')+'</div>').join('')+'</div>':'')
+      +(notes.length?'<div class="diary-notes">'+notes.map(n=>'<div class="diary-note-row"><span class="diary-note-dot" style="background:'+memberColor(n.member_id)+'"></span><span class="diary-note-name">'+memberName(n.member_id)+'</span><span style="white-space:pre-wrap;">'+n.content+'</span>'+(isAdmin()||(currentMember&&n.member_id===currentMember.id)?'<button class="btn-sm btn-delete-sm" data-action="delnote" data-nid="'+n.id+'">✕</button>':'')+'</div>').join('')+'</div>':'')
       +(tls.length?'<div class="diary-timeline">'+tls.map(tl=>renderTimelineStop(tl,d.id)).join('')+'</div>':'')
       +'</div>';
   }).join('');
@@ -1460,11 +1461,11 @@ function renderTimelineStop(tl,tripId){
       +'<span class="chip-name">'+memberName(r.member_id)+'</span>'
       +'<span class="chip-stars">'+starsStr(r.stars)+'</span></div>'
       +(r.comment?'<span style="white-space:pre-wrap;">'+r.comment+'</span>':'')
-      +(editMode?'<button class="btn-sm btn-delete-sm" style="margin-left:auto;flex-shrink:0;" data-action="deltlrating" data-rid="'+r.id+'">✕</button>':'')
+      +(isAdmin()||(currentMember&&r.member_id===currentMember.id)?'<button class="btn-sm btn-delete-sm" style="margin-left:auto;flex-shrink:0;" data-action="deltlrating" data-rid="'+r.id+'">✕</button>':'')
       +'</div>').join('')
     +(ratings.length===0?'<span style="font-size:0.72rem;color:var(--text-muted);">尚無評價</span>':'')
     +'</div>'
-    +'<button class="diary-add-review-btn" data-action="prreviewstop" data-tlid="'+tl.id+'" style="background:var(--brown-pale);color:var(--brown);">⭐ 我的評分</button>'
+    +(isLoggedIn()?'<button class="diary-add-review-btn" data-action="prreviewstop" data-tlid="'+tl.id+'" style="background:var(--brown-pale);color:var(--brown);">⭐ 我的評分</button>':'')
     +(editMode?'<button class="diary-add-review-btn" data-action="reviewstop" data-tlid="'+tl.id+'">＋ 新增評價（管理員）</button>':'')
     +'</div></div>';
 }
@@ -1586,6 +1587,10 @@ async function deleteDiary(id){
 
 // ══ PERSONAL NOTE MODAL ══
 let noteTargetDiaryId=null,noteAuthedMemberId=null;
+
+
+function isAdmin(){return currentUser&&currentUser.id===ADMIN_UID;}
+function isLoggedIn(){return currentUser!==null;}
 
 // ══ AUTH ══
 function openLoginModal(){
