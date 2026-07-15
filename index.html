@@ -202,6 +202,7 @@ nav{display:flex;gap:0.15rem;align-items:center;}
 .avatar-letter{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:700;}
 .avatar-upload-overlay{position:absolute;inset:0;background:rgba(74,64,53,0.5);border-radius:50%;cursor:pointer;color:white;font-size:0.65rem;display:none;align-items:center;justify-content:center;flex-direction:column;gap:2px;line-height:1.4;text-align:center;}
 .edit-mode .member-avatar-lg:hover .avatar-upload-overlay{display:flex;}
+.logged-in .member-avatar-lg[data-own]:hover .avatar-upload-overlay{display:flex;}
 .member-name-lg{font-family:'Noto Serif TC',serif;font-size:1.05rem;font-weight:600;margin-bottom:0.2rem;}
 .member-tagline{font-size:0.8rem;color:var(--text-muted);margin-bottom:1rem;line-height:1.5;font-style:italic;}
 .member-bio{font-size:0.825rem;color:var(--text-light);line-height:1.7;margin-bottom:1rem;}
@@ -1281,7 +1282,7 @@ function renderMembers(){
     const av=m.avatar?'<img src="'+m.avatar+'" alt="'+m.name+'">'
       :'<div class="avatar-letter">'+m.name.charAt(0)+'</div>';
     return '<div class="member-card">'
-      +'<div class="member-avatar-lg" style="'+(m.avatar?'':'background:'+m.color)+'" data-mid="'+m.id+'">'+av
+      +'<div class="member-avatar-lg" style="'+(m.avatar?'':'background:'+m.color)+'" data-mid="'+m.id+'"'+(currentMember&&currentMember.id===m.id?' data-own="1"':'')+'>'+av
       +'<div class="avatar-upload-overlay">📷<span>更換照片</span></div></div>'
       +'<input type="file" accept="image/*" id="avatar-input-'+m.id+'" style="display:none">'
       +'<div class="member-name-lg">'+m.name+'</div>'
@@ -1289,9 +1290,9 @@ function renderMembers(){
       +(m.bio?'<div class="member-bio">'+m.bio+'</div>':'')
       +(prefs.length?'<div class="member-prefs">'+prefs.map(p=>'<span class="pref-tag">'+p+'</span>').join('')+'</div>':'')
       +'<div class="member-stats"><div class="member-stat-n">'+rc+'</div><div class="member-stat-l">則評價</div></div>'
-      +(!isAdmin()&&currentMember&&currentMember.id===m.id?'<div style="margin-top:0.5rem;"><button class="btn-sm btn-edit-sm" data-action="editm" data-mid="'+m.id+'">✏️ 編輯我的資料</button></div>':'')
+      +(currentMember&&currentMember.id===m.id&&!isAdmin()?'<div style="margin-top:0.5rem;"><button class="btn-sm btn-edit-sm" data-action="editm" data-mid="'+m.id+'">✏️ 編輯我的資料</button></div>':'')
       +(isAdmin()?'<div class="edit-actions">'
-      +'<button class="btn-sm btn-edit-sm" data-action="editm" data-mid="'+m.id+'">✏️ 編輯</button>'
+      +(currentMember&&currentMember.id===m.id?'<button class="btn-sm btn-edit-sm" data-action="editm" data-mid="'+m.id+'">✏️ 編輯我的資料</button>':'<button class="btn-sm btn-edit-sm" data-action="editm" data-mid="'+m.id+'">✏️ 編輯</button>')
       +'<button class="btn-sm btn-delete-sm" data-action="delm" data-mid="'+m.id+'">🗑 刪除</button>'
       +'</div>':'')
       +'</div></div>';
@@ -1304,7 +1305,7 @@ function renderMembers(){
       return;
     }
     const av=e.target.closest('.member-avatar-lg[data-mid]');
-    if(av&&editMode)triggerAvatarUpload(av.dataset.mid);
+    if(av&&(isAdmin()||(currentMember&&currentMember.id===av.dataset.mid)))triggerAvatarUpload(av.dataset.mid);
   };
   grid.querySelectorAll('input[type=file]').forEach(inp=>{
     inp.onchange=e=>handleAvatarUpload(e,inp.id.replace('avatar-input-',''));
@@ -1650,7 +1651,7 @@ async function doLogout(){
   const client=getSupaClient();
   if(client)await client.auth.signOut();
   currentUser=null;currentMember=null;editMode=false;
-  document.body.classList.remove('edit-mode');
+  document.body.classList.remove('edit-mode','logged-in');
   document.getElementById('user-badge').style.display='none';
   document.getElementById('login-btn').style.display='inline-block';
   document.getElementById('edit-toggle-btn').style.display='none';
@@ -1672,6 +1673,7 @@ async function onAuthStateChange(user){
 
   document.getElementById('login-btn').style.display='none';
   document.getElementById('user-badge').style.display='flex';
+  document.body.classList.add('logged-in');
   document.getElementById('user-name-badge').textContent='👋 '+name;
 
   if(isAdmin){
