@@ -734,7 +734,7 @@ async function gistPush() {
       // 因此推送後重新讀取一次 Gist，確認內容真的寫入了
       try {
         const verifyRes = await fetch('https://api.github.com/gists/' + GIST_ID + '?_=' + Date.now(), {
-          headers: { 'Accept': 'application/vnd.github+json', 'Cache-Control': 'no-cache' }
+          headers: { 'Accept': 'application/vnd.github+json' }
         });
         if (verifyRes.ok) {
           const verifyGist = await verifyRes.json();
@@ -777,7 +777,7 @@ async function gistPull() {
   setSyncStatus('syncing', '讀取中…');
   try {
     const res = await fetch('https://api.github.com/gists/' + GIST_ID + '?_=' + Date.now(), {
-      headers: { 'Accept': 'application/vnd.github+json', 'Cache-Control': 'no-cache' }
+      headers: { 'Accept': 'application/vnd.github+json' }
     });
     if (!res.ok) {
       if (res.status === 403) {
