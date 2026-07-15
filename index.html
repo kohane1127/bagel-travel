@@ -471,6 +471,8 @@ textarea.form-input{resize:vertical;min-height:80px;}
   </nav>
   <div class="header-actions">
     <span id="sync-status" style="font-size:0.72rem;color:#A09488;display:none;"></span>
+    <button class="btn-edit" id="export-btn" onclick="exportData()" title="匯出資料備份" style="display:none;">⬇️ 備份</button>
+    <label class="btn-edit" id="import-btn" title="匯入資料" style="display:none;cursor:pointer;">⬆️ 還原<input type="file" accept=".json" onchange="importData(event)" style="display:none;"></label>
     <button class="btn-edit" id="sync-btn" onclick="openSyncSettings()" title="雲端同步設定" style="padding:0.35rem 0.6rem;display:none;">☁️ 雲端同步</button>
     <span class="edit-active-badge" id="edit-badge">編輯中</span>
     <button class="btn-edit" id="edit-toggle-btn" onclick="toggleEditMode()">🔒 編輯</button>
@@ -721,7 +723,7 @@ let currentDiaryFilter='全部';
 // 編輯者請把這裡換成你自己建立的 Gist ID
 const DEFAULT_GIST_ID = 'a89103bd288b0f08cd2454b2c88697cf';
 let GIST_ID = localStorage.getItem('bagel_gist_id') || DEFAULT_GIST_ID;
-let GIST_TOKEN = localStorage.getItem('bagel_gist_token') || '';
+let GIST_TOKEN = localStorage.getItem('bagel_gist_token') || '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';
 let syncStatus = 'idle'; // idle | syncing | ok | error
 let pendingPushPromise = null; // tracks in-flight push so pull can wait for it
 
@@ -878,10 +880,10 @@ function saveSyncSettings() {
 }
 
 function loadData(){try{const r=localStorage.getItem(STORAGE_KEY);if(r)data=JSON.parse(r);}catch(e){}}
-function saveData(skipPush, skipStamp){
+function saveData(skipPush, skipStamp, forcePush){
   if(!skipStamp) data._updatedAt = Date.now();
   localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
-  if(!skipPush && GIST_ID && GIST_TOKEN && editMode) gistPush();
+  if(!skipPush && GIST_ID && GIST_TOKEN && (editMode || forcePush)) gistPush();
 }
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
@@ -901,6 +903,8 @@ async function checkPassword(){
     document.getElementById('edit-toggle-btn').textContent='🔓 鎖定';
     document.getElementById('sync-btn').style.display='inline-block';
     document.getElementById('sync-status').style.display='inline';
+    document.getElementById('export-btn').style.display='inline-block';
+    document.getElementById('import-btn').style.display='inline-block';
     closePwModal();renderAll();
   }else{
     document.getElementById('pw-error').style.display='block';
@@ -914,6 +918,8 @@ function toggleEditMode(){
     document.getElementById('edit-toggle-btn').textContent='🔒 編輯';
     document.getElementById('sync-btn').style.display='none';
     document.getElementById('sync-status').style.display='none';
+    document.getElementById('export-btn').style.display='none';
+    document.getElementById('import-btn').style.display='none';
     renderAll();
   }else{
     document.getElementById('pw-error').style.display='none';
@@ -1653,14 +1659,14 @@ function savePrReview(){
   if(prTargetPlaceId){
     const p=data.places.find(x=>x.id===prTargetPlaceId);
     if(p){if(!p.reviews)p.reviews=[];p.reviews.push(review);}
-    saveData();closePrModal();renderPlaceList();renderOsmMarkers();
+    saveData(false,false,true);closePrModal();renderPlaceList();renderOsmMarkers();
   } else if(prTargetDiaryId!==null && prTargetStopIdx!==null){
     const d=data.diaries.find(x=>x.id===prTargetDiaryId);
     if(d&&d.stops[prTargetStopIdx]){
       if(!d.stops[prTargetStopIdx].reviews)d.stops[prTargetStopIdx].reviews=[];
       d.stops[prTargetStopIdx].reviews.push(review);
     }
-    saveData();closePrModal();renderDiaries();
+    saveData(false,false,true);closePrModal();renderDiaries();
   }
 }
 
@@ -1735,7 +1741,7 @@ function saveNote(){
   const txt = document.getElementById('note-textarea').value.trim();
   if(txt) d.notes[noteAuthedMemberId]=txt;
   else delete d.notes[noteAuthedMemberId];
-  saveData();
+  saveData(false,false,true);
   closeNoteModal();
   renderDiaries();
 }
@@ -1762,6 +1768,48 @@ document.addEventListener('DOMContentLoaded',function(){
     });
   }
 });
+
+
+// ══ 資料備份與還原 ══
+function exportData(){
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const date = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = 'bagel_backup_' + date + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  setSyncStatus('ok', '✅ 備份已下載');
+}
+
+function importData(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  if(!confirm('確定要還原備份？這會覆蓋目前所有資料（包含雲端）。')) {
+    event.target.value=''; return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const imported = JSON.parse(e.target.result);
+      if(!imported.members || !imported.places || !imported.diaries){
+        alert('檔案格式不正確，請確認是貝果世家的備份檔');
+        return;
+      }
+      data = imported;
+      data._updatedAt = Date.now();
+      saveData(false, true); // 寫入並推送，但不蓋時間戳（已手動設定）
+      renderAll();
+      setSyncStatus('ok', '✅ 還原成功，已同步至雲端');
+    } catch(err){
+      alert('讀取備份失敗：' + err.message);
+    }
+    event.target.value='';
+  };
+  reader.readAsText(file);
+}
 
 function renderAll(){renderHome();renderMembers();renderDiaries();renderPlaceList();}
 
