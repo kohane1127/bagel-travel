@@ -428,6 +428,15 @@ textarea.form-input{resize:vertical;min-height:80px;}
 #place-mini-map .leaflet-container { border-radius:10px; }
 
 #osm-map, #osm-map .leaflet-container { width:100% !important; height:100% !important; }
+
+/* Trip notes */
+.diary-notes{padding:0.75rem 1.5rem;border-top:1px dashed var(--cream-deep);display:flex;flex-direction:column;gap:0.5rem;}
+.diary-note-row{display:flex;align-items:flex-start;gap:0.6rem;font-size:0.82rem;color:var(--text-light);line-height:1.65;}
+.diary-note-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:0.3rem;}
+.diary-note-name{font-weight:600;flex-shrink:0;min-width:3.5em;}
+.dm-note-input{width:100%;padding:0.5rem 0.75rem;border:1.5px solid var(--cream-deep);border-radius:10px;font-family:'Noto Sans TC',sans-serif;font-size:0.8rem;color:var(--text);background:var(--cream);outline:none;resize:none;min-height:60px;}
+.dm-note-input:focus{border-color:var(--green-light);background:var(--white);}
+.dm-note-member-label{font-size:0.75rem;font-weight:500;margin-bottom:0.2rem;display:flex;align-items:center;gap:0.35rem;}
 </style>
 </head>
 <body>
@@ -672,6 +681,10 @@ textarea.form-input{resize:vertical;min-height:80px;}
     <div class="form-group"><label class="form-label">行程地點（按順序，逗號分隔）</label>
       <input type="text" class="form-input" id="dm-stops" placeholder="山丘上的咖啡, 柳川水岸步道">
       <p style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem;">請填入已新增的地點名稱</p>
+    </div>
+    <div class="form-group">
+      <label class="form-label">整體行程心得 <span style="font-size:0.7rem;color:var(--text-muted);">（每位貝果都可以填，純文字）</span></label>
+      <div id="dm-notes-wrap" style="display:flex;flex-direction:column;gap:0.5rem;"></div>
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeDiaryModal()">取消</button>
@@ -1056,7 +1069,20 @@ function renderOsmMarkers(){
   });
 }
 function buildPopupHtml(p){
-  const avg=avgStars(p.reviews);
+  // Merge reviews from diary stops that reference this place
+  const allReviews=[...(p.reviews||[])];
+  const seen=new Set(allReviews.map(r=>r.memberId+'_'+r.stars+'_'+(r.comment||'')));
+  data.diaries.forEach(d=>{
+    (d.stops||[]).forEach(s=>{
+      if(s.name===p.name){
+        (s.reviews||[]).forEach(r=>{
+          const key=r.memberId+'_'+r.stars+'_'+(r.comment||'');
+          if(!seen.has(key)){seen.add(key);allReviews.push(r);}
+        });
+      }
+    });
+  });
+  const avg=allReviews.length>0?(allReviews.reduce((a,r)=>a+r.stars,0)/allReviews.length).toFixed(1):null;
   let h='<div style="min-width:220px;font-family:sans-serif;">';
   h+='<div style="font-weight:700;font-size:0.95rem;color:#4A4035;margin-bottom:0.3rem;">'+p.name+'</div>';
   const mp=[];
@@ -1064,9 +1090,9 @@ function buildPopupHtml(p){
   if(p.county)mp.push('<span style="color:#A09488;font-size:0.72rem;">'+p.county+'</span>');
   if(avg)mp.push('<span style="color:#C4956A;font-size:0.72rem;">★ '+avg+'</span>');
   if(mp.length)h+='<div style="display:flex;gap:0.35rem;flex-wrap:wrap;align-items:center;margin-bottom:0.5rem;">'+mp.join('')+'</div>';
-  if(p.reviews&&p.reviews.length>0){
+  if(allReviews.length>0){
     h+='<div style="border-top:1px solid #E8DFD0;padding-top:0.4rem;margin-bottom:0.5rem;display:flex;flex-direction:column;gap:0.3rem;">';
-    p.reviews.forEach(r=>{
+    allReviews.forEach(r=>{
       h+='<div style="display:flex;align-items:flex-start;gap:0.35rem;font-size:0.78rem;">'
         +'<span style="color:'+memberColor(r.memberId)+';font-weight:700;flex-shrink:0;">'+memberName(r.memberId)+'</span>'
         +'<span style="color:#C4956A;white-space:nowrap;">'+starsStr(r.stars)+'</span>'
@@ -1376,6 +1402,10 @@ function renderDiaryList(tag){
         +'<button class="btn-sm btn-delete-sm" data-action="deld" data-did="'+d.id+'">🗑</button>'
         +'</div>':'')
       +'</div>'
+      // Trip-level notes
+      +(Object.keys(d.notes||{}).length>0?'<div class="diary-notes">'+Object.entries(d.notes||{}).map(([mid,note])=>{
+        return '<div class="diary-note-row"><span class="diary-note-dot" style="background:'+memberColor(mid)+'"></span><span class="diary-note-name">'+memberName(mid)+'</span><span>'+note+'</span></div>';
+      }).join('')+'</div>':'')
       +((d.tags||[]).length?'<div class="diary-tags">'+d.tags.map(t=>'<span class="diary-tag">'+t+'</span>').join('')+'</div>':'')
       +((d.memberIds||[]).length?'<div class="diary-members-row"><span style="margin-right:0.25rem;">參與：</span>'+d.memberIds.map(mid=>'<span class="member-pill"><span class="pill-dot" style="background:'+memberColor(mid)+'"></span>'+memberName(mid)+'</span>').join('')+'</div>':'')
       +(stops.length?'<div class="diary-timeline">'+stops.map((s,si)=>renderTimelineStop(s,d.id,si)).join('')+'</div>':'')
@@ -1415,7 +1445,7 @@ function openAddDiary(){
   editingId.diary=null;
   document.getElementById('diary-modal-title').textContent='新增旅遊行程';
   ['dm-title','dm-date','dm-tags','dm-stops'].forEach(id=>document.getElementById(id).value='');
-  renderDiaryMemberChecks([]);
+  renderDiaryMemberChecks([],{});
   document.getElementById('diary-modal-overlay').classList.add('show');
 }
 function openEditDiary(id){
@@ -1426,10 +1456,11 @@ function openEditDiary(id){
   document.getElementById('dm-date').value=d.date;
   document.getElementById('dm-tags').value=(d.tags||[]).join(', ');
   document.getElementById('dm-stops').value=(d.stops||[]).map(s=>s.name).join(', ');
-  renderDiaryMemberChecks(d.memberIds||[]);
+  renderDiaryMemberChecks(d.memberIds||[], d.notes||{});
   document.getElementById('diary-modal-overlay').classList.add('show');
 }
-function renderDiaryMemberChecks(selected){
+function renderDiaryMemberChecks(selected, existingNotes){
+  existingNotes = existingNotes || {};
   const el=document.getElementById('dm-members-check');
   el.innerHTML=data.members.map(m=>{
     const checked=selected.includes(m.id);
@@ -1442,6 +1473,15 @@ function renderDiaryMemberChecks(selected){
       if(lbl){lbl.style.background=e.target.checked?'var(--green-pale)':'var(--cream)';lbl.style.borderColor=e.target.checked?'var(--green-light)':'var(--cream-deep)';}
     }
   };
+  // Render note inputs for each member
+  const notesWrap=document.getElementById('dm-notes-wrap');
+  if(notesWrap){
+    notesWrap.innerHTML=data.members.map(m=>{
+      const val=existingNotes[m.id]||'';
+      return '<div><div class="dm-note-member-label"><span class="pill-dot" style="background:'+m.color+';width:8px;height:8px;border-radius:50%;display:inline-block;"></span>'+m.name+'</div>'
+        +'<textarea class="dm-note-input" id="dm-note-'+m.id+'" placeholder="'+m.name+'的心得（選填）">'+val+'</textarea></div>';
+    }).join('');
+  }
 }
 function closeDiaryModal(){document.getElementById('diary-modal-overlay').classList.remove('show');}
 function saveDiary(){
@@ -1451,13 +1491,19 @@ function saveDiary(){
   const memberIds=[...document.querySelectorAll('#dm-members-check input:checked')].map(cb=>cb.value);
   const tags=document.getElementById('dm-tags').value.split(',').map(s=>s.trim()).filter(Boolean);
   const stopNames=document.getElementById('dm-stops').value.split(',').map(s=>s.trim()).filter(Boolean);
+  // Collect per-member trip notes
+  const notes={};
+  data.members.forEach(m=>{
+    const el=document.getElementById('dm-note-'+m.id);
+    if(el&&el.value.trim()) notes[m.id]=el.value.trim();
+  });
   const stops=stopNames.map(name=>{
     const ep=data.places.find(p=>p.name===name);
     if(editingId.diary){const d=data.diaries.find(x=>x.id===editingId.diary);const es=d&&d.stops&&d.stops.find(s=>s.name===name);if(es)return es;}
     return{name,type:ep?ep.type:'',reviews:[]};
   });
-  if(editingId.diary){const d=data.diaries.find(x=>x.id===editingId.diary);if(d){d.title=title;d.date=date;d.memberIds=memberIds;d.tags=tags;d.stops=stops;}}
-  else data.diaries.push({id:uid(),title,date,memberIds,tags,stops});
+  if(editingId.diary){const d=data.diaries.find(x=>x.id===editingId.diary);if(d){d.title=title;d.date=date;d.memberIds=memberIds;d.tags=tags;d.stops=stops;d.notes=notes;}}
+  else data.diaries.push({id:uid(),title,date,memberIds,tags,stops,notes});
   saveData();closeDiaryModal();currentDiaryFilter='全部';renderDiaries();renderHome();
 }
 function deleteDiary(id){
