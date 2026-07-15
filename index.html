@@ -437,6 +437,16 @@ textarea.form-input{resize:vertical;min-height:80px;}
 .dm-note-input{width:100%;padding:0.5rem 0.75rem;border:1.5px solid var(--cream-deep);border-radius:10px;font-family:'Noto Sans TC',sans-serif;font-size:0.8rem;color:var(--text);background:var(--cream);outline:none;resize:none;min-height:60px;}
 .dm-note-input:focus{border-color:var(--green-light);background:var(--white);}
 .dm-note-member-label{font-size:0.75rem;font-weight:500;margin-bottom:0.2rem;display:flex;align-items:center;gap:0.35rem;}
+
+/* Allow line breaks in review comments and notes */
+.stop-review-row span:last-of-type,
+.diary-note-row span:last-of-type,
+.review-comment,
+.bagel-popup-review span {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.dm-note-input { white-space: pre-wrap; }
 </style>
 </head>
 <body>
@@ -1069,19 +1079,7 @@ function renderOsmMarkers(){
   });
 }
 function buildPopupHtml(p){
-  // Merge reviews from diary stops that reference this place
-  const allReviews=[...(p.reviews||[])];
-  const seen=new Set(allReviews.map(r=>r.memberId+'_'+r.stars+'_'+(r.comment||'')));
-  data.diaries.forEach(d=>{
-    (d.stops||[]).forEach(s=>{
-      if(s.name===p.name){
-        (s.reviews||[]).forEach(r=>{
-          const key=r.memberId+'_'+r.stars+'_'+(r.comment||'');
-          if(!seen.has(key)){seen.add(key);allReviews.push(r);}
-        });
-      }
-    });
-  });
+  const allReviews=getMergedReviews(p);
   const avg=allReviews.length>0?(allReviews.reduce((a,r)=>a+r.stars,0)/allReviews.length).toFixed(1):null;
   let h='<div style="min-width:220px;font-family:sans-serif;">';
   h+='<div style="font-weight:700;font-size:0.95rem;color:#4A4035;margin-bottom:0.3rem;">'+p.name+'</div>';
@@ -1096,7 +1094,7 @@ function buildPopupHtml(p){
       h+='<div style="display:flex;align-items:flex-start;gap:0.35rem;font-size:0.78rem;">'
         +'<span style="color:'+memberColor(r.memberId)+';font-weight:700;flex-shrink:0;">'+memberName(r.memberId)+'</span>'
         +'<span style="color:#C4956A;white-space:nowrap;">'+starsStr(r.stars)+'</span>'
-        +(r.comment?'<span style="color:#7A6F62;">'+r.comment+'</span>':'')
+        +(r.comment?'<span style="color:#7A6F62;white-space:pre-wrap;">'+r.comment+'</span>':'')
         +'</div>';
     });
     h+='</div>';
@@ -1145,6 +1143,23 @@ function updatePlaceMarker(){
 }
 
 // ══ PLACE LIST ══
+function getMergedReviews(p){
+  // 合併地點本身的評價 + 所有旅遊行程裡同名地點的評價
+  const all=[...(p.reviews||[])];
+  const seen=new Set(all.map(r=>r.memberId+'_'+r.stars+'_'+(r.comment||'')));
+  data.diaries.forEach(d=>{
+    (d.stops||[]).forEach(s=>{
+      if(s.name===p.name){
+        (s.reviews||[]).forEach(r=>{
+          const key=r.memberId+'_'+r.stars+'_'+(r.comment||'');
+          if(!seen.has(key)){seen.add(key);all.push(r);}
+        });
+      }
+    });
+  });
+  return all;
+}
+
 function renderPlaceList(filter){
   filter=filter||'';
   const list=document.getElementById('place-list');
@@ -1156,17 +1171,18 @@ function renderPlaceList(filter){
     return;
   }
   list.innerHTML=places.map(p=>{
-    const avg=avgStars(p.reviews);
+    const merged=getMergedReviews(p);
+    const avg=avgStars(merged);
     return '<div class="place-card" id="pc-'+p.id+'" data-pid="'+p.id+'">'
       +'<div class="place-card-header"><div class="place-name">'+p.name+'</div>'+(p.type?'<span class="place-type">'+p.type+'</span>':'')+'</div>'
       +((p.county||p.location)?'<div class="place-location">📍 '+(p.county||'')+(p.location?' · '+p.location:'')+'</div>':'')
       +'<div class="avg-stars"><span class="stars-display">'+(avg?starsStr(Math.round(avg)):'☆☆☆☆☆')+'</span><span class="avg-score">'+(avg||'尚無評價')+'</span></div>'
-      +((p.reviews||[]).length>0?'<div class="stop-reviews" style="margin:0.4rem 0;">'+p.reviews.map((r,ri)=>'<div class="stop-review-row">'
+      +(merged.length>0?'<div class="stop-reviews" style="margin:0.4rem 0;">'+merged.map((r,ri)=>'<div class="stop-review-row">'
         +'<div class="stop-reviewer-chip"><div class="chip-dot" style="background:'+memberColor(r.memberId)+'"></div>'
         +'<span class="chip-name">'+memberName(r.memberId)+'</span>'
         +'<span class="chip-stars">'+starsStr(r.stars)+'</span></div>'
-        +(r.comment?'<span>'+r.comment+'</span>':'')
-        +(editMode?'<button class="btn-sm btn-delete-sm" style="margin-left:auto;flex-shrink:0;" data-action="delplacereview" data-pid="'+p.id+'" data-ri="'+ri+'">✕</button>':'')
+        +(r.comment?'<span style="white-space:pre-wrap;">'+r.comment+'</span>':'')
+        +(editMode&&r._fromPlace!==false?'<button class="btn-sm btn-delete-sm" style="margin-left:auto;flex-shrink:0;" data-action="delplacereview" data-pid="'+p.id+'" data-ri="'+ri+'">✕</button>':'')
         +'</div>').join('')+'</div>':'')
       +'<div class="edit-actions" data-pid="'+p.id+'">'
       +'<button class="btn-sm btn-edit-sm" data-action="edit" data-pid="'+p.id+'">✏️ 編輯</button>'
