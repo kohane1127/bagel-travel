@@ -584,7 +584,7 @@ textarea.form-input{resize:vertical;min-height:80px;}
   <div class="members-view">
     <div class="view-header">
       <div><div class="section-heading">關於貝果</div><div class="section-sub">我們這群人，各有偏好</div></div>
-      <button class="add-btn" onclick="openAddMember()">＋ 新增貝果</button>
+      <button class="add-btn" id="add-member-btn" onclick="openAddMember()" style="display:none;">＋ 新增貝果</button>
     </div>
     <div class="members-grid" id="members-grid"></div>
   </div>
@@ -692,7 +692,8 @@ textarea.form-input{resize:vertical;min-height:80px;}
     <h3 id="diary-modal-title">新增旅遊行程</h3>
     <div class="form-row">
       <div class="form-group"><label class="form-label">行程標題 *</label><input type="text" class="form-input" id="dm-title" placeholder="這次旅程的名字"></div>
-      <div class="form-group"><label class="form-label">日期 *</label><input type="date" class="form-input" id="dm-date"></div>
+      <div class="form-group"><label class="form-label">開始日期 *</label><input type="date" class="form-input" id="dm-date"></div>
+      <div class="form-group"><label class="form-label">結束日期 <span style="font-size:0.7rem;color:var(--text-muted);">（多日遊才填，單日留空）</span></label><input type="date" class="form-input" id="dm-end-date"></div>
     </div>
     <div class="form-group"><label class="form-label">地區分類（含 北部/中部/南部/東部 可被篩選）</label><input type="text" class="form-input" id="dm-tags" placeholder="中部, 一日遊, 美食"></div>
     <div class="form-group"><label class="form-label">參與的貝果</label>
@@ -790,6 +791,17 @@ let editingId = {location:null, member:null, trip:null};
 let currentDiaryFilter = '全部';
 
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+
+function formatDateRange(startDate, endDate){
+  if(!endDate) return '';
+  const s=new Date(startDate+'T00:00:00');
+  const e=new Date(endDate+'T00:00:00');
+  const days=Math.round((e-s)/(1000*60*60*24))+1;
+  // Show month/day range
+  const sm=(s.getMonth()+1)+'月'+s.getDate()+'日';
+  const em=(e.getMonth()+1)+'月'+e.getDate()+'日';
+  return sm+'–'+em+'（'+days+'天）';
+}
 
 // ══ PASSWORD ══
 const ADMIN_PW_HASH = 'ad7de7f33a2d0d86643b20f8d7b0a8009709c1d91b4baee8cb88d6f848af412f';
@@ -1101,7 +1113,7 @@ function renderPlaceList(filter){
         +'<span class="chip-name">'+memberName(r.member_id)+'</span>'
         +'<span class="chip-stars">'+starsStr(r.stars)+'</span></div>'
         +(r.comment?'<span style="white-space:pre-wrap;">'+r.comment+'</span>':'')
-        +(editMode?'<button class="btn-sm btn-delete-sm" style="margin-left:auto;flex-shrink:0;" data-action="delrating" data-rid="'+r.id+'" data-locid="'+loc.id+'">✕</button>':'')
+        +(isAdmin()?'<button class="btn-sm btn-delete-sm" style="margin-left:auto;flex-shrink:0;" data-action="delrating" data-rid="'+r.id+'" data-locid="'+loc.id+'">✕</button>':'')
         +'</div>').join('')+'</div>':'')
       +(isLoggedIn()?'<div style="display:flex;gap:0.4rem;margin-top:0.5rem;flex-wrap:wrap;">'
       +'<button class="btn-sm" style="background:var(--brown-pale);color:var(--brown);" data-action="prreview" data-pid="'+loc.id+'">⭐ 我的評分</button>'
@@ -1256,6 +1268,8 @@ async function deleteTripLocationRating(rid){
 
 // ══ MEMBERS ══
 function renderMembers(){
+  const addBtn=document.getElementById('add-member-btn');
+  if(addBtn)addBtn.style.display=isAdmin()?'inline-block':'none';
   const grid=document.getElementById('members-grid');
   if(members.length===0){
     grid.innerHTML='<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">🧡</div><p>還沒有成員<br>開啟編輯模式新增貝果吧！</p></div>';
@@ -1427,7 +1441,7 @@ function renderDiaryList(tag){
     const notes=getTripNotes(d.id);
     return '<div class="diary-entry">'
       +'<div class="diary-header">'
-      +'<div class="diary-date-block"><div class="diary-date-month">'+(dt.getMonth()+1)+'月</div><div class="diary-date-day">'+dt.getDate()+'</div></div>'
+      +'<div class="diary-date-block"><div class="diary-date-month">'+(dt.getMonth()+1)+'月</div><div class="diary-date-day">'+dt.getDate()+'</div>'+(d.end_date?'<div style="font-size:0.55rem;opacity:0.8;">至 '+new Date(d.end_date+'T00:00:00').getDate()+'日</div>':'')+'</div>'
       +'<div class="diary-title-area"><div class="diary-title">'+d.title+'</div><div class="diary-meta"><span>'+dt.getFullYear()+'年</span><span>'+tls.length+' 個地點</span></div></div>'
       +'<div style="display:flex;gap:0.35rem;margin-left:auto;flex-shrink:0;align-items:center;">'
       +(isLoggedIn()?'<button class="btn-sm btn-edit-sm" data-action="addnote" data-did="'+d.id+'" style="background:var(--brown-pale);color:var(--brown);">✍️ 心得</button>':'')
@@ -1483,7 +1497,7 @@ function renderTimelineStop(tl,tripId){
 function openAddDiary(){
   editingId.trip=null;
   document.getElementById('diary-modal-title').textContent='新增旅遊行程';
-  ['dm-title','dm-date','dm-tags','dm-stops'].forEach(id=>document.getElementById(id).value='');
+  ['dm-title','dm-date','dm-end-date','dm-tags','dm-stops'].forEach(id=>document.getElementById(id).value='');
   renderDiaryMemberChecks([],{});
   document.getElementById('diary-modal-overlay').classList.add('show');
 }
@@ -1493,6 +1507,7 @@ function openEditDiary(id){
   document.getElementById('diary-modal-title').textContent='編輯行程';
   document.getElementById('dm-title').value=d.title;
   document.getElementById('dm-date').value=d.date;
+  document.getElementById('dm-end-date').value=d.end_date||'';
   document.getElementById('dm-tags').value=(d.tags||[]).join(', ');
   const tls=getTripLocations(id);
   document.getElementById('dm-stops').value=tls.map(tl=>tl.location_name||'').join(', ');
@@ -1540,7 +1555,8 @@ async function saveDiary(){
   try{
     setSyncStatus('syncing','儲存中…');
     const tripId=editingId.trip||uid();
-    const tripObj={id:tripId,title,date,tags};
+    const endDate=document.getElementById('dm-end-date').value;
+    const tripObj={id:tripId,title,date,end_date:endDate||null,tags};
     if(editingId.trip){
       await sbPatch('trips','?id=eq.'+tripId,tripObj);
       const i=trips.findIndex(x=>x.id===tripId);
