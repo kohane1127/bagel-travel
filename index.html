@@ -1489,7 +1489,7 @@ function renderTimelineStop(tl,tripId){
     +(ratings.length===0?'<span style="font-size:0.72rem;color:var(--text-muted);">尚無評價</span>':'')
     +'</div>'
     +(isLoggedIn()?'<button class="diary-add-review-btn" data-action="prreviewstop" data-tlid="'+tl.id+'" style="background:var(--brown-pale);color:var(--brown);">⭐ 我的評分</button>':'')
-    +(editMode?'<button class="diary-add-review-btn" data-action="reviewstop" data-tlid="'+tl.id+'">＋ 新增評價（管理員）</button>':'')
+    +(isAdmin()?'<button class="diary-add-review-btn" data-action="reviewstop" data-tlid="'+tl.id+'">＋ 新增評價（管理員）</button>':'')
     +'</div></div>';
 }
 
