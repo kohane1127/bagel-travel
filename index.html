@@ -473,7 +473,6 @@ textarea.form-input{resize:vertical;min-height:80px;}
     <span id="sync-status" style="font-size:0.72rem;color:#A09488;display:none;"></span>
     <button class="btn-edit" id="export-btn" onclick="exportData()" title="匯出資料備份" style="display:none;">⬇️ 備份</button>
     <label class="btn-edit" id="import-btn" title="匯入資料" style="display:none;cursor:pointer;">⬆️ 還原<input type="file" accept=".json" onchange="importData(event)" style="display:none;"></label>
-    <button class="btn-edit" id="sync-btn" onclick="openSyncSettings()" title="雲端同步設定" style="padding:0.35rem 0.6rem;display:none;">☁️ 雲端同步</button>
     <span class="edit-active-badge" id="edit-badge">編輯中</span>
     <button class="btn-edit" id="edit-toggle-btn" onclick="toggleEditMode()">🔒 編輯</button>
   </div>
@@ -716,15 +715,15 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // Supabase REST helper
 async function sb(table, method='GET', body=null, query=''){
   const url = `${SUPABASE_URL}/rest/v1/${table}${query}`;
-  const opts = {
-    method,
-    headers:{
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': method==='POST' ? 'return=representation' : (method==='PATCH'||method==='PUT' ? 'return=representation' : '')
-    }
+  const headers = {
+    'apikey': SUPABASE_KEY,
+    'Authorization': `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
   };
+  if(method==='POST'||method==='PATCH'||method==='PUT'){
+    headers['Prefer'] = 'return=representation';
+  }
+  const opts = {method, headers};
   if(body) opts.body = JSON.stringify(body);
   const res = await fetch(url, opts);
   if(!res.ok){
@@ -774,7 +773,6 @@ async function checkPassword(){
     document.body.classList.add('edit-mode');
     document.getElementById('edit-badge').style.display='inline';
     document.getElementById('edit-toggle-btn').textContent='🔓 鎖定';
-    document.getElementById('sync-btn').style.display='inline-block';
     document.getElementById('export-btn').style.display='inline-block';
     document.getElementById('import-btn').style.display='inline-block';
     closePwModal();
@@ -790,7 +788,6 @@ function toggleEditMode(){
     document.body.classList.remove('edit-mode');
     document.getElementById('edit-badge').style.display='none';
     document.getElementById('edit-toggle-btn').textContent='🔒 編輯';
-    document.getElementById('sync-btn').style.display='none';
     document.getElementById('export-btn').style.display='none';
     document.getElementById('import-btn').style.display='none';
     renderAll();
@@ -1700,7 +1697,46 @@ async function importData(event){
     try{
       const d=JSON.parse(e.target.result);
       setSyncStatus('syncing','匯入中…');
-      // Simple re-import: upsert all records
+      // Handle old Gist backup format (has 'places' instead of 'locations')
+      if(d.places && !d.locations){
+        // Convert old format to new
+        for(const p of d.places){
+          const loc={id:p.id,name:p.name,type:p.type||null,county:p.county||null,
+            location:p.location||null,gmaps:p.gmaps||null,lat:p.lat||null,lng:p.lng||null};
+          await sbUpsert('locations',loc);
+          // Convert place reviews to location_ratings
+          for(const r of (p.reviews||[])){
+            await sbUpsert('location_ratings',{id:r.id,location_id:p.id,member_id:r.memberId,stars:r.stars,comment:r.comment||null});
+          }
+        }
+        // Convert old members format
+        for(const m of (d.members||[])){
+          await sbUpsert('members',{id:m.id,name:m.name,color:m.color,tagline:m.tagline||null,bio:m.bio||null,prefs:m.prefs||null,avatar:m.avatar||null,pw_hash:m.pwHash||null});
+        }
+        // Convert old diaries to trips
+        for(const diary of (d.diaries||[])){
+          await sbUpsert('trips',{id:diary.id,title:diary.title,date:diary.date,tags:diary.tags||[]});
+          for(const mid of (diary.memberIds||[])){
+            try{await sb('trip_participants','POST',{trip_id:diary.id,member_id:mid},'?on_conflict=trip_id,member_id');}catch(e){}
+          }
+          for(let si=0;si<(diary.stops||[]).length;si++){
+            const s=diary.stops[si];
+            const loc=d.places&&d.places.find(p=>p.name===s.name);
+            const tlId=diary.id+'_'+si;
+            await sbUpsert('trip_locations',{id:tlId,trip_id:diary.id,location_id:loc?loc.id:null,location_name:s.name,sort_order:si});
+            for(const r of (s.reviews||[])){
+              await sbUpsert('trip_location_ratings',{id:r.id,trip_location_id:tlId,member_id:r.memberId,stars:r.stars,comment:r.comment||null});
+            }
+          }
+          // Convert notes
+          if(diary.notes){
+            for(const [mid,content] of Object.entries(diary.notes)){
+              await sbUpsert('trip_notes',{id:diary.id+'_note_'+mid,trip_id:diary.id,member_id:mid,content});
+            }
+          }
+        }
+      } else {
+      // New Supabase backup format
       for(const m of (d.members||[]))await sbUpsert('members',m);
       for(const l of (d.locations||[]))await sbUpsert('locations',l);
       for(const r of (d.locationRatings||[]))await sbUpsert('location_ratings',r);
@@ -1709,6 +1745,7 @@ async function importData(event){
       for(const tl of (d.tripLocations||[]))await sbUpsert('trip_locations',tl);
       for(const tlr of (d.tripLocationRatings||[]))await sbUpsert('trip_location_ratings',tlr);
       for(const tn of (d.tripNotes||[]))await sbUpsert('trip_notes',tn);
+      } // end else (new format)
       setSyncStatus('ok','✅ 匯入完成，重新載入中…');
       await loadAll();
     }catch(err){setSyncStatus('error','匯入失敗：'+err.message);console.error(err);}
