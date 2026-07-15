@@ -1700,18 +1700,21 @@ async function importData(event){
       // Handle old Gist backup format (has 'places' instead of 'locations')
       if(d.places && !d.locations){
         // Convert old format to new
+        // Step 1: members first (FK dependency)
+        for(const m of (d.members||[])){
+          await sbUpsert('members',{id:m.id,name:m.name,color:m.color,tagline:m.tagline||null,bio:m.bio||null,prefs:m.prefs||null,avatar:m.avatar||null,pw_hash:m.pwHash||null});
+        }
+        // Step 2: locations
         for(const p of d.places){
           const loc={id:p.id,name:p.name,type:p.type||null,county:p.county||null,
             location:p.location||null,gmaps:p.gmaps||null,lat:p.lat||null,lng:p.lng||null};
           await sbUpsert('locations',loc);
-          // Convert place reviews to location_ratings
+        }
+        // Step 3: location_ratings (needs members + locations)
+        for(const p of d.places){
           for(const r of (p.reviews||[])){
             await sbUpsert('location_ratings',{id:r.id,location_id:p.id,member_id:r.memberId,stars:r.stars,comment:r.comment||null});
           }
-        }
-        // Convert old members format
-        for(const m of (d.members||[])){
-          await sbUpsert('members',{id:m.id,name:m.name,color:m.color,tagline:m.tagline||null,bio:m.bio||null,prefs:m.prefs||null,avatar:m.avatar||null,pw_hash:m.pwHash||null});
         }
         // Convert old diaries to trips
         for(const diary of (d.diaries||[])){
