@@ -1303,6 +1303,8 @@ function openEditMember(id){
   document.getElementById('mm-prefs').value=m.prefs||'';
   document.getElementById('mm-color').value=m.color||'#7A9E7E';
   document.getElementById('mm-pw').value='';
+  const authEl=document.getElementById('mm-auth-id');
+  if(authEl)authEl.value=m.auth_id||''; // load existing auth_id or clear
   document.getElementById('member-modal-overlay').classList.add('show');
 }
 function closeMemberModal(){document.getElementById('member-modal-overlay').classList.remove('show');}
@@ -1775,14 +1777,15 @@ function openPrModal(locId,dummy,tripLocId){
       btn.onclick=function(){prCurrentStars=parseInt(this.dataset.s);document.querySelectorAll('#pr-stars .star-btn').forEach((b,i)=>b.classList.toggle('lit',i<prCurrentStars));};
     });
   } else {
+    // Not logged in: show password auth section
     document.getElementById('pr-auth-section').style.display='block';
     document.getElementById('pr-form-section').style.display='none';
     document.getElementById('pr-verify-btn').style.display='inline-block';
     document.getElementById('pr-save-btn').style.display='none';
+    const eligible=members.filter(m=>m.pw_hash);
+    if(eligible.length===0){alert('請先登入才能評分。');return;}
+    document.getElementById('pr-member-select').innerHTML=eligible.map(m=>'<option value="'+m.id+'">'+m.name+'</option>').join('');
   }
-  const eligible=members.filter(m=>m.pw_hash);
-  if(!currentUser&&eligible.length===0){alert('請先登入或請管理員設定個人密碼。');return;}
-  if(!currentUser)document.getElementById('pr-member-select').innerHTML=eligible.map(m=>'<option value="'+m.id+'">'+m.name+'</option>').join('');
   let title='新增評分';
   if(locId){const loc=locations.find(x=>x.id===locId);if(loc)title='評分 ｜ '+loc.name;}
   else if(tripLocId){const tl=tripLocations.find(x=>x.id===tripLocId);if(tl)title='評分 ｜ '+(tl.location_name||'');}
@@ -1923,6 +1926,7 @@ loadAll();
 <div class="modal-overlay" id="note-modal-overlay">
   <div class="modal" style="max-width:420px;">
     <h3 id="note-modal-title">填寫行程心得</h3>
+    <div id="note-auth-section" style="display:none;">
     <div class="form-group">
       <label class="form-label">我是</label>
       <select class="form-input" id="note-member-select"></select>
@@ -1931,6 +1935,7 @@ loadAll();
       <label class="form-label">個人密碼</label>
       <input type="password" class="form-input" id="note-pw-input" placeholder="輸入你的個人密碼" onkeydown="if(event.key==='Enter')verifyNoteAuth()">
       <div id="note-pw-error" style="color:#c0392b;font-size:0.78rem;margin-top:0.35rem;display:none;">密碼不對喔 🥯</div>
+    </div>
     </div>
     <div id="note-textarea-wrap" style="display:none;">
       <div class="form-group">
@@ -1949,7 +1954,7 @@ loadAll();
 <div class="modal-overlay" id="personal-review-modal-overlay">
   <div class="modal" style="max-width:420px;">
     <h3 id="pr-modal-title">新增評分</h3>
-    <div id="pr-auth-section">
+    <div id="pr-auth-section" style="display:none;">
       <div class="form-group">
         <label class="form-label">我是</label>
         <select class="form-input" id="pr-member-select"></select>
