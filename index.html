@@ -723,7 +723,7 @@ let currentDiaryFilter='全部';
 // 編輯者請把這裡換成你自己建立的 Gist ID
 const DEFAULT_GIST_ID = 'a89103bd288b0f08cd2454b2c88697cf';
 let GIST_ID = localStorage.getItem('bagel_gist_id') || DEFAULT_GIST_ID;
-let GIST_TOKEN = localStorage.getItem('bagel_gist_token') || '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';
+let GIST_TOKEN = localStorage.getItem('bagel_gist_token') || '';
 let syncStatus = 'idle'; // idle | syncing | ok | error
 let pendingPushPromise = null; // tracks in-flight push so pull can wait for it
 
