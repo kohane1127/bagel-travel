@@ -847,13 +847,15 @@ async function loadAll(){
       sbGet('trip_notes','?order=updated_at'),
     ]);
     setSyncStatus('ok','✅ 已載入');
-    // Re-match currentMember after members are loaded
+    await initAuth();
+    // 資料載完後重新比對 currentMember（initAuth 執行時 members 可能還是空的）
     if(currentUser){
-      currentMember=members.find(m=>m.auth_id===currentUser.id)||null;
-      console.log('[Auth] user:', currentUser.id, 'member:', currentMember?.name||'null');
-      console.log('[Auth] all auth_ids:', members.map(m=>m.name+':'+m.auth_id));
+      const matched=members.find(m=>m.auth_id===currentUser.id)||null;
+      if(matched?.id !== currentMember?.id){
+        currentMember=matched;
+        console.log('[Auth] re-matched after loadAll:', currentMember?.name||'null');
+      }
     }
-    await initAuth(); // init auth after members are loaded (needed for member matching)
     renderAll();
   }catch(e){
     console.error('Load error:',e);
@@ -1645,7 +1647,10 @@ async function doLogout(){
 async function onAuthStateChange(user){
   if(!user)return;
   currentUser=user;
+  // members 陣列可能還是空的（loadAll 還沒完成），加個保險
   currentMember=members.find(m=>m.auth_id===user.id)||null;
+  console.log('[Auth] user:', user.id, '| member:', currentMember?.name||'null');
+  console.log('[Auth] auth_ids in members:', members.map(m=>m.name+':'+m.auth_id));
   const isAdmin=user.id===ADMIN_UID;
   const name=currentMember?currentMember.name:(isAdmin?'草莓貝果':user.email);
 
