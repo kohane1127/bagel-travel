@@ -723,8 +723,12 @@ const ADMIN_UID = '3321c4d3-9497-48ca-817d-46a4d167a510';
 // Supabase client (for Auth)
 let _supaClient = null;
 function getSupaClient(){
-  if(!_supaClient && window.supabase){
-    _supaClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  if(!_supaClient){
+    if(window.supabase){
+      _supaClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    } else if(typeof createClient !== 'undefined'){
+      _supaClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+    }
   }
   return _supaClient;
 }
@@ -1580,6 +1584,93 @@ async function deleteDiary(id){
 
 // ══ PERSONAL NOTE MODAL ══
 let noteTargetDiaryId=null,noteAuthedMemberId=null;
+
+// ══ AUTH ══
+function openLoginModal(){
+  document.getElementById('login-email').value='';
+  document.getElementById('login-password').value='';
+  document.getElementById('login-error').style.display='none';
+  document.getElementById('login-modal-overlay').classList.add('show');
+  setTimeout(()=>document.getElementById('login-email').focus(),100);
+}
+function closeLoginModal(){document.getElementById('login-modal-overlay').classList.remove('show');}
+
+async function doLogin(){
+  const email=document.getElementById('login-email').value.trim();
+  const password=document.getElementById('login-password').value;
+  if(!email||!password)return;
+  const errEl=document.getElementById('login-error');
+  errEl.style.display='none';
+  try{
+    const client=getSupaClient();
+    if(!client)throw new Error('Supabase SDK 尚未載入，請稍後再試');
+    const {data,error}=await client.auth.signInWithPassword({email,password});
+    if(error)throw error;
+    await onAuthStateChange(data.user);
+    closeLoginModal();
+  }catch(e){
+    errEl.textContent=e.message==='Invalid login credentials'?'Email 或密碼不正確':e.message;
+    errEl.style.display='block';
+  }
+}
+
+async function doLogout(){
+  const client=getSupaClient();
+  if(client)await client.auth.signOut();
+  currentUser=null;currentMember=null;editMode=false;
+  document.body.classList.remove('edit-mode');
+  document.getElementById('user-badge').style.display='none';
+  document.getElementById('login-btn').style.display='inline-block';
+  document.getElementById('edit-toggle-btn').style.display='none';
+  document.getElementById('edit-badge').style.display='none';
+  document.getElementById('export-btn').style.display='none';
+  document.getElementById('import-btn').style.display='none';
+  renderAll();
+}
+
+async function onAuthStateChange(user){
+  if(!user)return;
+  currentUser=user;
+  currentMember=members.find(m=>m.auth_id===user.id)||null;
+  const isAdmin=user.id===ADMIN_UID;
+  const name=currentMember?currentMember.name:(isAdmin?'草莓貝果':user.email);
+
+  document.getElementById('login-btn').style.display='none';
+  document.getElementById('user-badge').style.display='flex';
+  document.getElementById('user-name-badge').textContent='👋 '+name;
+
+  if(isAdmin){
+    document.getElementById('edit-toggle-btn').style.display='inline-block';
+  }else{
+    editMode=true;
+    document.body.classList.add('edit-mode');
+  }
+  renderAll();
+}
+
+async function initAuth(){
+  let attempts=0;
+  while(!window.supabase&&attempts<20){
+    await new Promise(r=>setTimeout(r,100));
+    attempts++;
+  }
+  const client=getSupaClient();
+  if(!client){console.warn('Supabase SDK not loaded');return;}
+  try{
+    const {data:{session}}=await client.auth.getSession();
+    if(session?.user)await onAuthStateChange(session.user);
+    client.auth.onAuthStateChange(async(event,session)=>{
+      if(event==='SIGNED_IN'&&session?.user)await onAuthStateChange(session.user);
+      else if(event==='SIGNED_OUT'){currentUser=null;currentMember=null;editMode=false;
+        document.body.classList.remove('edit-mode');
+        document.getElementById('user-badge').style.display='none';
+        document.getElementById('login-btn').style.display='inline-block';
+        document.getElementById('edit-toggle-btn').style.display='none';
+        renderAll();}
+    });
+  }catch(e){console.error('Auth init error:',e);}
+}
+
 function openNoteModal(diaryId){
   noteTargetDiaryId=diaryId;noteAuthedMemberId=null;
   document.getElementById('note-pw-error').style.display='none';
