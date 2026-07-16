@@ -563,6 +563,7 @@ textarea.form-input{resize:vertical;min-height:80px;}
           <h2>所有地點</h2>
           <button class="add-btn" id="add-place-btn" onclick="openAddPlace()" style="display:none;">＋ 新增</button>
         </div>
+        <div id="place-type-filters" style="display:flex;flex-wrap:wrap;gap:0.35rem;padding:0.5rem 0.85rem 0.25rem;border-bottom:1px solid var(--cream-deep);"></div>
         <input type="text" class="search-box" placeholder="搜尋地點…" oninput="filterPlaces(this.value)">
       </div>
       <div class="place-list" id="place-list"></div>
@@ -796,6 +797,9 @@ let currentYearFilter = '全部';
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
 
+function closeAllPopups(){
+  osmMarkers.forEach(m=>{try{m.closePopup();}catch(e){}});
+}
 function jumpToMapLocation(locId){
   doNav('map');
   setTimeout(()=>{
@@ -1039,10 +1043,17 @@ function buildPopupHtml(loc){
   if(ratings.length>0){
     h+='<div style="border-top:1px solid #E8DFD0;padding-top:0.4rem;margin-bottom:0.5rem;display:flex;flex-direction:column;gap:0.3rem;">';
     ratings.forEach(r=>{
+      // 找出這則評分來自哪個行程（若有 trip_location_id）
+      let tripInfo=null;
+      if(r.trip_location_id){
+        const tl=tripLocations.find(x=>x.id===r.trip_location_id);
+        if(tl){const trip=trips.find(x=>x.id===tl.trip_id);if(trip)tripInfo=trip;}
+      }
       h+='<div style="display:flex;align-items:flex-start;gap:0.35rem;font-size:0.78rem;">'
         +'<span style="color:'+memberColor(r.member_id)+';font-weight:700;flex-shrink:0;">'+memberName(r.member_id)+'</span>'
         +'<span style="color:#C4956A;white-space:nowrap;">'+starsStr(r.stars)+'</span>'
         +(r.comment?'<span style="color:#7A6F62;white-space:pre-wrap;">'+r.comment+'</span>':'')
+        +(tripInfo?'<span title="來自行程：'+tripInfo.title+'（'+tripInfo.date+'）" onclick="closeAllPopups();doNav(\'diary\');setTimeout(()=>{const el=document.getElementById(\'diary-entry-'+tripInfo.id+'\');if(el)el.scrollIntoView({behavior:\'smooth\'});},350);" style="cursor:pointer;color:#7A9E7E;font-size:0.68rem;flex-shrink:0;white-space:nowrap;text-decoration:underline;text-underline-offset:2px;margin-left:auto;">🗓 '+tripInfo.title+'</span>':'')
         +'</div>';
     });
     h+='</div>';
@@ -1108,7 +1119,12 @@ function renderPlaceList(filter){
   const addBtn=document.getElementById('add-place-btn');
   if(addBtn)addBtn.style.display=currentUser?'inline-block':'none';
   const list=document.getElementById('place-list');
-  const locs=locations.filter(p=>!filter||p.name.includes(filter)||(p.location||'').includes(filter)||(p.county||'').includes(filter)||(p.type||'').includes(filter));
+  const locs=locations.filter(p=>{
+    if(filter&&!p.name.includes(filter)&&!(p.location||'').includes(filter)&&!(p.county||'').includes(filter)&&!(p.type||'').includes(filter))return false;
+    if(currentTypeFilter!=='全部'&&p.type!==currentTypeFilter)return false;
+    return true;
+  });
+  renderPlaceTypeFilters();
   if(locs.length===0){
     list.innerHTML='<div class="empty-state"><div class="empty-icon">📍</div><p>'+(filter?'沒有符合的地點':'還沒有地點<br>開啟編輯模式新增吧！')+'</p></div>';
     return;
@@ -1154,7 +1170,21 @@ function renderPlaceList(filter){
     if(card)onPlaceClick(card.dataset.pid);
   };
 }
+let currentTypeFilter='全部';
 function filterPlaces(val){renderPlaceList(val);}
+function renderPlaceTypeFilters(){
+  const el=document.getElementById('place-type-filters');
+  if(!el)return;
+  const types=[...new Set(locations.map(l=>l.type).filter(Boolean))].sort();
+  el.innerHTML=['全部',...types].map(t=>
+    '<button class="diary-filter-btn'+(t===currentTypeFilter?' active':'')+'" onclick="setTypeFilter(''+t+'')" style="font-size:0.72rem;padding:0.25rem 0.65rem;">'+t+'</button>'
+  ).join('');
+}
+function setTypeFilter(t){
+  currentTypeFilter=t;
+  document.querySelectorAll('#place-type-filters .diary-filter-btn').forEach(b=>b.classList.toggle('active',b.textContent===t));
+  renderPlaceList(document.querySelector('.sidebar-search')?.value||'');
+}
 function onPlaceClick(id){
   document.querySelectorAll('.place-card').forEach(el=>el.classList.remove('active'));
   const card=document.getElementById('pc-'+id);
@@ -1475,7 +1505,7 @@ function renderDiaryList(tag){
     const memberIds=getTripParticipants(d.id);
     const tls=getTripLocations(d.id);
     const notes=getTripNotes(d.id);
-    return '<div class="diary-entry">'
+    return '<div class="diary-entry" id="diary-entry-'+d.id+'">'
       +'<div class="diary-header">'
       +'<div class="diary-date-block"><div class="diary-date-month">'+(dt.getMonth()+1)+'月</div><div class="diary-date-day">'+dt.getDate()+'</div>'+(d.end_date?'<div style="font-size:0.55rem;opacity:0.8;">至 '+new Date(d.end_date+'T00:00:00').getDate()+'日</div>':'')+'</div>'
       +'<div class="diary-title-area"><div class="diary-title">'+d.title+'</div><div class="diary-meta"><span>'+dt.getFullYear()+'年</span><span>'+tls.length+' 個地點</span></div></div>'
@@ -1486,7 +1516,7 @@ function renderDiaryList(tag){
       +'</div>'
       +'</div>'
       +((d.tags||[]).length?'<div class="diary-tags">'+d.tags.map(t=>'<span class="diary-tag">'+t+'</span>').join('')+'</div>':'')
-      +(memberIds.length?'<div class="diary-members-row"><span style="margin-right:0.25rem;">參與：</span>'+memberIds.map(mid=>'<span class="member-pill"><span class="pill-dot" style="background:'+memberColor(mid)+'"></span>'+memberName(mid)+'</span>').join('')+'</div>':'')
+      +(memberIds.length?'<div class="diary-members-row"><span style="margin-right:0.25rem;flex-shrink:0;">參與：</span><div style="display:flex;flex-wrap:wrap;gap:0.25rem;">'+memberIds.map(mid=>'<span class="member-pill"><span class="pill-dot" style="background:'+memberColor(mid)+'"></span>'+memberName(mid)+'</span>').join('')+'</div></div>':'')
       +(notes.length?'<div class="diary-notes">'+notes.map(n=>'<div class="diary-note-row"><span class="diary-note-dot" style="background:'+memberColor(n.member_id)+'"></span><span class="diary-note-name">'+memberName(n.member_id)+'</span><span style="white-space:pre-wrap;">'+n.content+'</span>'+(isAdmin()||(currentMember&&n.member_id===currentMember.id)?'<button class="btn-sm btn-delete-sm" data-action="delnote" data-nid="'+n.id+'">✕</button>':'')+'</div>').join('')+'</div>':'')
       +(tls.length?'<div class="diary-timeline">'+tls.map(tl=>renderTimelineStop(tl,d.id)).join('')+'</div>':'')
       +'</div>';
