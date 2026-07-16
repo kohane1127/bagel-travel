@@ -1191,8 +1191,15 @@ function renderPlaceTypeFilters(){
   if(!el)return;
   const types=[...new Set(locations.map(l=>l.type).filter(Boolean))].sort();
   el.innerHTML=['全部',...types].map(t=>
-    '<button class="diary-filter-btn'+(t===currentTypeFilter?' active':'')+'" onclick="setTypeFilter(''+t+'')" style="font-size:0.72rem;padding:0.25rem 0.65rem;">'+t+'</button>'
+    '<button class="diary-filter-btn'+(t===currentTypeFilter?' active':'')+'" data-action="settypefilter" data-type="'+t+'" style="font-size:0.72rem;padding:0.25rem 0.65rem;">'+t+'</button>'
   ).join('');
+  if(!el.dataset.bound){
+    el.dataset.bound='1';
+    el.addEventListener('click',function(e){
+      const btn=e.target.closest('[data-action="settypefilter"]');
+      if(btn)setTypeFilter(btn.dataset.type);
+    });
+  }
 }
 function setTypeFilter(t){
   currentTypeFilter=t;
@@ -1982,9 +1989,6 @@ async function savePrReview(){
 function closePrModal(){document.getElementById('personal-review-modal-overlay').classList.remove('show');prTargetLocId=null;prTargetTripLocId=null;prAuthedMemberId=null;}
 
 // ══ SYNC SETTINGS ══
-function openSyncSettings(){document.getElementById('sync-modal-overlay').classList.add('show');}
-function closeSyncModal(){document.getElementById('sync-modal-overlay').classList.remove('show');}
-function saveSyncSettings(){closeSyncModal();setSyncStatus('ok','設定已儲存');}
 
 // ══ EXPORT / IMPORT ══
 function exportData(){
@@ -2155,38 +2159,6 @@ loadAll();
     <div class="modal-actions" style="justify-content:center;flex-direction:column;gap:0.5rem;">
       <button class="btn-save" style="width:100%;" onclick="doLogin()">登入</button>
       <button class="btn-cancel" style="width:100%;" onclick="closeLoginModal()">取消</button>
-    </div>
-  </div>
-</div>
-<!-- SYNC SETTINGS MODAL -->
-<div class="modal-overlay" id="sync-modal-overlay">
-  <div class="modal" style="max-width:480px;">
-    <h3>☁️ 雲端同步設定</h3>
-    <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:1.25rem;line-height:1.7;">
-      使用 GitHub Gist 同步資料。<br>
-      <strong>一般訪客</strong>只需填 Gist ID 即可自動讀取最新資料。<br>
-      <strong>編輯者</strong>另需填 Token 才能推送編輯內容。
-    </p>
-    <div class="form-group">
-      <label class="form-label">Gist ID <span style="color:var(--green);font-size:0.7rem;">（所有人填）</span></label>
-      <input type="text" class="form-input" id="sync-gist-id" placeholder="例：a1b2c3d4e5f6...">
-      <p style="font-size:0.71rem;color:var(--text-muted);margin-top:0.3rem;">
-        前往 <a href="https://gist.github.com" target="_blank" style="color:var(--green);">gist.github.com</a> 新建一個 Public Gist，把網址最後那串 ID 貼上來
-      </p>
-    </div>
-    <div class="form-group">
-      <label class="form-label">GitHub Token <span style="color:var(--brown);font-size:0.7rem;">（僅編輯者需要）</span></label>
-      <input type="password" class="form-input" id="sync-gist-token" placeholder="ghp_xxxxxxxxxxxx（不填則唯讀）">
-      <p style="font-size:0.71rem;color:var(--text-muted);margin-top:0.3rem;">
-        GitHub → Settings → Developer settings → Personal access tokens → 勾選 <strong>gist</strong> 權限
-      </p>
-    </div>
-    <div class="modal-actions" style="justify-content:space-between;">
-      <button class="btn-cancel" onclick="closeSyncModal()">取消</button>
-      <div style="display:flex;gap:0.5rem;">
-        <button class="btn-cancel" onclick="gistPull();closeSyncModal();">⬇️ 立即拉取</button>
-        <button class="btn-save" onclick="saveSyncSettings()">儲存設定</button>
-      </div>
     </div>
   </div>
 </div>
