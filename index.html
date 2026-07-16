@@ -1500,6 +1500,7 @@ function renderDiaryList(tag){
       else if(btn.dataset.action==='reviewstop')openAddReview(null,btn.dataset.tlid,null);
       else if(btn.dataset.action==='prreviewstop')openPrModal(null,null,btn.dataset.tlid);
       else if(btn.dataset.action==='deltlrating')deleteTripLocationRating(btn.dataset.rid);
+      else if(btn.dataset.action==='jumploc')jumpToMapLocation(btn.dataset.locid);
     }
   };
 }
@@ -1519,7 +1520,7 @@ function renderTimelineStop(tl,tripId){
   return '<div class="timeline-stop">'
     +'<div class="timeline-left"><div class="timeline-dot"></div><div class="timeline-line"></div></div>'
     +'<div class="timeline-content">'
-    +(tl.location_id?'<div class="timeline-stop-name" style="cursor:pointer;color:var(--green);text-decoration:underline;text-underline-offset:2px;" onclick="jumpToMapLocation(''+tl.location_id+'')">'+'📍 '+name+'</div>':'<div class="timeline-stop-name">'+name+'</div>')
+    +(tl.location_id?'<div class="timeline-stop-name" style="cursor:pointer;color:var(--green);text-decoration:underline;text-underline-offset:2px;" data-action="jumploc" data-locid="'+tl.location_id+'">📍 '+name+'</div>':'<div class="timeline-stop-name">'+name+'</div>')
     +(type?'<div class="timeline-stop-type">'+typeEmoji(type)+' '+type+'</div>':'')
     +'<div class="stop-reviews">'
     +ratings.map((r,ri)=>'<div class="stop-review-row">'
