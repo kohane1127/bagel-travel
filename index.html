@@ -1619,17 +1619,38 @@ async function saveDiary(){
     }
     // Update trip_locations (always rebuild when stops field is not empty)
     if(stopNames.length>0){
-      // Delete existing trip_locations for this trip
+      // 先把舊的評分備份起來（用 location_name 當 key，避免 cascade delete 刪掉）
+      const oldTls=tripLocations.filter(tl=>tl.trip_id===tripId);
+      const savedRatings=[]; // [{location_name, rating}]
+      for(const tl of oldTls){
+        const ratings=tripLocationRatings.filter(r=>r.trip_location_id===tl.id);
+        for(const r of ratings){
+          savedRatings.push({location_name:tl.location_name,rating:r});
+        }
+      }
+      // 刪掉舊 trip_locations（cascade 會刪掉 trip_location_ratings）
       await sbDelete('trip_locations','?trip_id=eq.'+tripId);
       tripLocations=tripLocations.filter(tl=>tl.trip_id!==tripId);
-      // Also delete related ratings (they reference trip_location_id)
-      // (they stay in DB but won't display since trip_locations are gone)
+      tripLocationRatings=tripLocationRatings.filter(r=>!oldTls.some(tl=>tl.id===r.trip_location_id));
+      // 重新建立 trip_locations
+      const newTls=[];
       for(let i=0;i<stopNames.length;i++){
         const name=stopNames[i];
         const loc=locations.find(x=>x.name===name);
         const tlObj={id:uid(),trip_id:tripId,location_id:loc?loc.id:null,location_name:name,sort_order:i};
         const res=await sbPost('trip_locations',tlObj);
-        tripLocations.push(res?res[0]:tlObj);
+        const newTl=res?res[0]:tlObj;
+        tripLocations.push(newTl);
+        newTls.push(newTl);
+      }
+      // 把備份的評分重新寫入對應的新 trip_location_id
+      for(const {location_name,rating} of savedRatings){
+        const newTl=newTls.find(tl=>tl.location_name===location_name);
+        if(newTl){
+          const newRating={...rating,id:uid(),trip_location_id:newTl.id};
+          const res=await sbPost('trip_location_ratings',newRating);
+          tripLocationRatings.push(res?res[0]:newRating);
+        }
       }
     }
     // Update notes
