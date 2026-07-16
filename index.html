@@ -1520,7 +1520,7 @@ function renderTimelineStop(tl,tripId){
   return '<div class="timeline-stop">'
     +'<div class="timeline-left"><div class="timeline-dot"></div><div class="timeline-line"></div></div>'
     +'<div class="timeline-content">'
-    +(tl.location_id?'<div class="timeline-stop-name" style="cursor:pointer;color:var(--green);text-decoration:underline;text-underline-offset:2px;" data-action="jumploc" data-locid="'+tl.location_id+'">📍 '+name+'</div>':'<div class="timeline-stop-name">'+name+'</div>')
+    +(tl.location_id?'<div class="timeline-stop-name">📍 <button style="background:none;border:none;padding:0;cursor:pointer;color:var(--green);text-decoration:underline;text-underline-offset:2px;font-size:inherit;font-family:inherit;" data-action="jumploc" data-locid="'+tl.location_id+'">'+name+'</button></div>':'<div class="timeline-stop-name">'+name+'</div>')
     +(type?'<div class="timeline-stop-type">'+typeEmoji(type)+' '+type+'</div>':'')
     +'<div class="stop-reviews">'
     +ratings.map((r,ri)=>'<div class="stop-review-row">'
@@ -1616,8 +1616,13 @@ async function saveDiary(){
       await sbPost('trip_participants',{trip_id:tripId,member_id:mid});
       tripParticipants.push({trip_id:tripId,member_id:mid});
     }
-    // Update trip_locations (only if new trip or stops changed)
-    if(!editingId.trip){
+    // Update trip_locations (always rebuild when stops field is not empty)
+    if(stopNames.length>0){
+      // Delete existing trip_locations for this trip
+      await sbDelete('trip_locations','?trip_id=eq.'+tripId);
+      tripLocations=tripLocations.filter(tl=>tl.trip_id!==tripId);
+      // Also delete related ratings (they reference trip_location_id)
+      // (they stay in DB but won't display since trip_locations are gone)
       for(let i=0;i<stopNames.length;i++){
         const name=stopNames[i];
         const loc=locations.find(x=>x.name===name);
