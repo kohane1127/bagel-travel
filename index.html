@@ -827,6 +827,11 @@ document.addEventListener('click',function(e){
       const entry=document.getElementById('diary-entry-'+tid);
       if(entry)entry.scrollIntoView({behavior:'smooth'});
     },350);
+    return;
+  }
+  const bindEl=e.target.closest('[data-action="bindrating"]');
+  if(bindEl){
+    openBindModal(bindEl.dataset.rid,bindEl.dataset.locid);
   }
 });
 function jumpToMapLocation(locId){
@@ -1093,11 +1098,13 @@ function buildPopupHtml(loc){
         const tl=tripLocations.find(x=>x.id===r.trip_location_id);
         if(tl){const trip=trips.find(x=>x.id===tl.trip_id);if(trip)tripInfo=trip;}
       }
+      const canBind=!tripInfo&&(isAdmin()||(currentMember&&r.member_id===currentMember.id));
       h+='<div style="display:flex;flex-direction:column;gap:0.15rem;font-size:0.78rem;">'
         +'<div style="display:flex;align-items:center;gap:0.35rem;">'
         +'<span style="color:'+memberColor(r.member_id)+';font-weight:700;">'+memberName(r.member_id)+'</span>'
         +'<span style="color:#C4956A;white-space:nowrap;">'+starsStr(r.stars)+'</span>'
         +(tripInfo?'<span data-action="gotodiary" data-tid="'+tripInfo.id+'" title="來自行程：'+tripInfo.title+'（'+tripInfo.date+'）" style="cursor:pointer;color:#7A9E7E;font-size:0.75rem;margin-left:auto;flex-shrink:0;">🗓</span>':'')
+        +(canBind?'<span data-action="bindrating" data-rid="'+r.id+'" data-locid="'+loc.id+'" title="綁定到行程" style="cursor:pointer;color:#C4956A;font-size:0.72rem;margin-left:auto;flex-shrink:0;">🔗</span>':'')
         +'</div>'
         +(r.comment?'<span style="color:#7A6F62;white-space:pre-wrap;word-break:break-word;">'+r.comment+'</span>':'')
         +'</div>';
@@ -1187,7 +1194,8 @@ function renderPlaceList(filter){
         +'<span class="chip-name">'+memberName(r.member_id)+'</span>'
         +'<span class="chip-stars">'+starsStr(r.stars)+'</span></div>'
         +(r.comment?'<span style="white-space:pre-wrap;">'+r.comment+'</span>':'')
-        +(isAdmin()?'<button class="btn-sm btn-delete-sm" style="margin-left:auto;flex-shrink:0;" data-action="delrating" data-rid="'+r.id+'" data-locid="'+loc.id+'">✕</button>':'')
+        +(!r.trip_location_id&&(isAdmin()||(currentMember&&r.member_id===currentMember.id))?'<button class="btn-sm" style="margin-left:auto;flex-shrink:0;background:var(--brown-pale);color:var(--brown);" data-action="bindrating" data-rid="'+r.id+'" data-locid="'+loc.id+'">🔗 綁定行程</button>':'')
+        +(isAdmin()?'<button class="btn-sm btn-delete-sm" style="flex-shrink:0;" data-action="delrating" data-rid="'+r.id+'" data-locid="'+loc.id+'">✕</button>':'')
         +'</div>').join('')+'</div>':'')
       +(isLoggedIn()?'<div style="display:flex;gap:0.4rem;margin-top:0.5rem;flex-wrap:wrap;">'
       +'<button class="btn-sm" style="background:var(--brown-pale);color:var(--brown);" data-action="prreview" data-pid="'+loc.id+'">⭐ 我的評分</button>'
@@ -1210,6 +1218,7 @@ function renderPlaceList(filter){
       else if(btn.dataset.action==='review')openAddReview(pid,null,null);
       else if(btn.dataset.action==='prreview')openPrModal(pid,null,null);
       else if(btn.dataset.action==='delrating')deleteLocationRating(btn.dataset.rid, btn.dataset.locid);
+      else if(btn.dataset.action==='bindrating')openBindModal(btn.dataset.rid, btn.dataset.locid);
       return;
     }
     const card=e.target.closest('.place-card[data-pid]');
@@ -1273,6 +1282,13 @@ function closePlaceModal(){document.getElementById('place-modal-overlay').classL
 async function savePlace(){
   const name=document.getElementById('pm-name').value.trim();
   if(!name)return alert('請輸入地點名稱');
+  if(!editingId.location){
+    const dup=locations.find(l=>l.name===name||l.name.includes(name)||name.includes(l.name));
+    if(dup){
+      const ok=confirm('地圖上已經有類似名稱的地點「'+dup.name+'」了，確定要新增一個新的嗎？\n\n（如果其實是同一個地方，建議取消，改用現有的地點評分，不然評分會分散在兩筆不同紀錄裡）');
+      if(!ok)return;
+    }
+  }
   const obj={
     id: editingId.location||uid(),
     name,
@@ -2032,18 +2048,59 @@ document.addEventListener('DOMContentLoaded',function(){
 
 // ══ PERSONAL REVIEW MODAL ══
 let prTargetLocId=null,prTargetTripLocId=null,prAuthedMemberId=null,prCurrentStars=0;
-function prefillPrForm(memberId){
-  let existing=null;
-  if(prTargetLocId)existing=locationRatings.find(r=>r.location_id===prTargetLocId&&r.member_id===memberId);
-  else if(prTargetTripLocId)existing=tripLocationRatings.find(r=>r.trip_location_id===prTargetTripLocId&&r.member_id===memberId);
-  prCurrentStars=existing?existing.stars:0;
-  document.getElementById('pr-comment').value=existing?(existing.comment||''):'';
+let prEditingRatingId=null,prExistingLocRating=null;
+function prShowForm(){
+  document.getElementById('pr-existing-choice').style.display='none';
+  document.getElementById('pr-form-section').style.display='block';
+}
+function prChooseEdit(){
+  if(!prExistingLocRating)return;
+  prEditingRatingId=prExistingLocRating.id;
+  prCurrentStars=prExistingLocRating.stars;
+  document.getElementById('pr-comment').value=prExistingLocRating.comment||'';
   document.querySelectorAll('#pr-stars .star-btn').forEach((b,i)=>b.classList.toggle('lit',i<prCurrentStars));
+  prShowForm();
+}
+function prChooseNew(){
+  prEditingRatingId=null;
+  prCurrentStars=0;
+  document.getElementById('pr-comment').value='';
+  document.querySelectorAll('#pr-stars .star-btn').forEach(b=>b.classList.remove('lit'));
+  prShowForm();
+}
+function prefillPrForm(memberId){
+  prEditingRatingId=null;prExistingLocRating=null;
+  prCurrentStars=0;
+  document.getElementById('pr-comment').value='';
+  document.querySelectorAll('#pr-stars .star-btn').forEach(b=>b.classList.remove('lit'));
+  if(prTargetLocId){
+    // 地圖層級的評分：可能是不同次造訪，交給使用者選擇要編輯還是新增
+    const existing=locationRatings.find(r=>r.location_id===prTargetLocId&&r.member_id===memberId);
+    if(existing){
+      prExistingLocRating=existing;
+      document.getElementById('pr-existing-summary').textContent=starsStr(existing.stars)+(existing.comment?' 「'+existing.comment+'」':'');
+      document.getElementById('pr-existing-choice').style.display='block';
+      document.getElementById('pr-form-section').style.display='none';
+      return;
+    }
+  }else if(prTargetTripLocId){
+    // 行程站點的評分：同一次行程視為同一次造訪，直接當作更新
+    const existing=tripLocationRatings.find(r=>r.trip_location_id===prTargetTripLocId&&r.member_id===memberId);
+    if(existing){
+      prEditingRatingId=existing.id;
+      prCurrentStars=existing.stars;
+      document.getElementById('pr-comment').value=existing.comment||'';
+      document.querySelectorAll('#pr-stars .star-btn').forEach((b,i)=>b.classList.toggle('lit',i<prCurrentStars));
+    }
+  }
+  prShowForm();
 }
 function openPrModal(locId,dummy,tripLocId){
   prTargetLocId=locId;prTargetTripLocId=tripLocId;prAuthedMemberId=null;prCurrentStars=0;
+  prEditingRatingId=null;prExistingLocRating=null;
   document.getElementById('pr-pw-error').style.display='none';
   document.getElementById('pr-pw-input').value='';
+  document.getElementById('pr-existing-choice').style.display='none';
   document.getElementById('pr-form-section').style.display='none';
   document.getElementById('pr-verify-btn').style.display='inline-block';
   document.getElementById('pr-save-btn').style.display='none';
@@ -2052,7 +2109,6 @@ function openPrModal(locId,dummy,tripLocId){
   // If logged in with a matching member, skip password
   if(currentUser&&currentMember){
     prAuthedMemberId=currentMember.id;
-    document.getElementById('pr-form-section').style.display='block';
     document.getElementById('pr-verify-btn').style.display='none';
     document.getElementById('pr-save-btn').style.display='inline-block';
     document.getElementById('pr-auth-section').style.display='none';
@@ -2086,7 +2142,6 @@ async function verifyPrAuth(){
   if(hash!==m.pw_hash){document.getElementById('pr-pw-error').style.display='block';document.getElementById('pr-pw-input').value='';return;}
   prAuthedMemberId=mid;
   document.getElementById('pr-pw-error').style.display='none';
-  document.getElementById('pr-form-section').style.display='block';
   document.getElementById('pr-verify-btn').style.display='none';
   document.getElementById('pr-save-btn').style.display='inline-block';
   document.querySelectorAll('#pr-stars .star-btn').forEach(btn=>{
@@ -2101,10 +2156,10 @@ async function savePrReview(){
   try{
     setSyncStatus('syncing','儲存中…');
     if(prTargetLocId){
-      const existing=locationRatings.find(r=>r.location_id===prTargetLocId&&r.member_id===prAuthedMemberId);
-      if(existing){
-        await sbPatch('location_ratings','?id=eq.'+existing.id,{stars:prCurrentStars,comment});
-        existing.stars=prCurrentStars;existing.comment=comment;
+      if(prEditingRatingId){
+        await sbPatch('location_ratings','?id=eq.'+prEditingRatingId,{stars:prCurrentStars,comment});
+        const existing=locationRatings.find(r=>r.id===prEditingRatingId);
+        if(existing){existing.stars=prCurrentStars;existing.comment=comment;}
       }else{
         const obj={id:uid(),location_id:prTargetLocId,member_id:prAuthedMemberId,stars:prCurrentStars,comment};
         const res=await sbPost('location_ratings',obj);
@@ -2112,10 +2167,10 @@ async function savePrReview(){
       }
       renderPlaceList();renderOsmMarkers();
     }else if(prTargetTripLocId){
-      const existing=tripLocationRatings.find(r=>r.trip_location_id===prTargetTripLocId&&r.member_id===prAuthedMemberId);
-      if(existing){
-        await sbPatch('trip_location_ratings','?id=eq.'+existing.id,{stars:prCurrentStars,comment});
-        existing.stars=prCurrentStars;existing.comment=comment;
+      if(prEditingRatingId){
+        await sbPatch('trip_location_ratings','?id=eq.'+prEditingRatingId,{stars:prCurrentStars,comment});
+        const existing=tripLocationRatings.find(r=>r.id===prEditingRatingId);
+        if(existing){existing.stars=prCurrentStars;existing.comment=comment;}
       }else{
         const obj={id:uid(),trip_location_id:prTargetTripLocId,member_id:prAuthedMemberId,stars:prCurrentStars,comment};
         const res=await sbPost('trip_location_ratings',obj);
@@ -2127,7 +2182,59 @@ async function savePrReview(){
     closePrModal();
   }catch(e){setSyncStatus('error','儲存失敗：'+e.message);}
 }
-function closePrModal(){document.getElementById('personal-review-modal-overlay').classList.remove('show');prTargetLocId=null;prTargetTripLocId=null;prAuthedMemberId=null;}
+function closePrModal(){document.getElementById('personal-review-modal-overlay').classList.remove('show');prTargetLocId=null;prTargetTripLocId=null;prAuthedMemberId=null;prEditingRatingId=null;prExistingLocRating=null;}
+
+// ══ 綁定地圖評分到行程 ══
+let bindRatingId=null;
+function openBindModal(ratingId,locId){
+  const rating=locationRatings.find(r=>r.id===ratingId);
+  if(!rating)return;
+  const tls=tripLocations.filter(tl=>tl.location_id===locId);
+  if(tls.length===0){
+    alert('這個地點目前還沒有被加進任何行程。\n請先到「旅遊行程」新增或編輯一個行程，把這個地點加進去，再回來綁定評分。');
+    return;
+  }
+  bindRatingId=ratingId;
+  const listEl=document.getElementById('bind-trip-list');
+  if(!listEl.dataset.bound){
+    listEl.dataset.bound='1';
+    listEl.addEventListener('click',function(e){
+      const btn=e.target.closest('[data-action="bindpick"]');
+      if(btn)bindRatingToTrip(btn.dataset.tlid);
+    });
+  }
+  listEl.innerHTML=tls.map(tl=>{
+    const trip=trips.find(t=>t.id===tl.trip_id);
+    if(!trip)return '';
+    const already=tripLocationRatings.some(r=>r.trip_location_id===tl.id&&r.member_id===rating.member_id);
+    return '<button type="button" class="btn-sm btn-edit-sm" style="justify-content:flex-start;text-align:left;width:100%;" data-action="bindpick" data-tlid="'+tl.id+'">🗓 '+trip.title+'（'+trip.date+'）'+(already?'　<span style="opacity:0.6;">（已有評分，會覆蓋）</span>':'')+'</button>';
+  }).join('');
+  document.getElementById('bind-modal-overlay').classList.add('show');
+}
+function closeBindModal(){document.getElementById('bind-modal-overlay').classList.remove('show');bindRatingId=null;}
+async function bindRatingToTrip(tlId){
+  const rating=locationRatings.find(r=>r.id===bindRatingId);
+  if(!rating)return;
+  const existing=tripLocationRatings.find(r=>r.trip_location_id===tlId&&r.member_id===rating.member_id);
+  if(existing&&!confirm('這個行程站點已經有這位貝果的評分了，要用地圖上這則覆蓋過去嗎？'))return;
+  try{
+    setSyncStatus('syncing','綁定中…');
+    if(existing){
+      await sbPatch('trip_location_ratings','?id=eq.'+existing.id,{stars:rating.stars,comment:rating.comment});
+      existing.stars=rating.stars;existing.comment=rating.comment;
+    }else{
+      const obj={id:uid(),trip_location_id:tlId,member_id:rating.member_id,stars:rating.stars,comment:rating.comment};
+      const res=await sbPost('trip_location_ratings',obj);
+      tripLocationRatings.push(res?res[0]:obj);
+    }
+    await sbDelete('location_ratings','?id=eq.'+rating.id);
+    locationRatings=locationRatings.filter(r=>r.id!==rating.id);
+    setSyncStatus('ok','✅ 已綁定到行程');
+    closeBindModal();
+    closeAllPopups();
+    renderPlaceList();renderOsmMarkers();renderDiaries();
+  }catch(e){setSyncStatus('error','綁定失敗：'+e.message);}
+}
 
 // ══ SYNC SETTINGS ══
 
@@ -2259,6 +2366,13 @@ loadAll();
         <div id="pr-pw-error" style="color:#c0392b;font-size:0.78rem;margin-top:0.35rem;display:none;">密碼不對喔 🥯</div>
       </div>
     </div>
+    <div id="pr-existing-choice" style="display:none;background:var(--cream);border-radius:12px;padding:0.75rem 0.9rem;margin-bottom:0.9rem;font-size:0.8rem;color:var(--text-light);">
+      <div style="margin-bottom:0.5rem;">你之前已經評過這裡了：<span id="pr-existing-summary" style="color:var(--text);font-weight:500;"></span></div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        <button type="button" class="btn-sm btn-edit-sm" onclick="prChooseEdit()">✏️ 編輯上一則</button>
+        <button type="button" class="btn-sm" style="background:var(--green-pale);color:var(--green);" onclick="prChooseNew()">＋ 這是不同次造訪，新增一則</button>
+      </div>
+    </div>
     <div id="pr-form-section" style="display:none;">
       <div class="form-group">
         <label class="form-label">星級</label>
@@ -2279,6 +2393,17 @@ loadAll();
       <button class="btn-cancel" onclick="closePrModal()">取消</button>
       <button class="btn-cancel" id="pr-verify-btn" onclick="verifyPrAuth()">驗證身份</button>
       <button class="btn-save" id="pr-save-btn" style="display:none;" onclick="savePrReview()">儲存評分</button>
+    </div>
+  </div>
+</div>
+<!-- BIND RATING TO TRIP MODAL -->
+<div class="modal-overlay" id="bind-modal-overlay">
+  <div class="modal" style="max-width:420px;">
+    <h3>🔗 綁定評分到行程</h3>
+    <p style="font-size:0.8rem;color:var(--text-muted);line-height:1.6;margin-bottom:0.75rem;">選這則評分是哪一次行程留下的，綁定後會變成該行程站點的評分，並從地圖評分移除，之後就會跟著那次行程一起顯示。</p>
+    <div id="bind-trip-list" style="display:flex;flex-direction:column;gap:0.4rem;"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeBindModal()">取消</button>
     </div>
   </div>
 </div>
