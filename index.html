@@ -28,6 +28,17 @@ nav{display:flex;gap:0.15rem;align-items:center;}
 .nav-btn:hover,.nav-btn.active{background:var(--green-pale);color:var(--green);font-weight:500;}
 .nav-dropdown-wrap{position:relative;}
 .nav-dropdown{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--white);border:1.5px solid var(--cream-deep);border-radius:14px;box-shadow:0 6px 20px var(--shadow);min-width:140px;padding:0.4rem;display:none;flex-direction:column;gap:0.15rem;z-index:1100;}
+.stop-chip{display:inline-flex;align-items:center;gap:0.35rem;background:var(--green-pale);color:var(--green);font-size:0.78rem;padding:0.3rem 0.35rem 0.3rem 0.65rem;border-radius:16px;}
+.stop-chip.unmatched{background:var(--brown-pale);color:var(--brown);border:1px dashed var(--brown-light);}
+.stop-chip-num{font-weight:700;opacity:0.65;}
+.stop-chip-btn{background:none;border:none;cursor:pointer;color:inherit;opacity:0.6;font-size:0.7rem;padding:0.1rem 0.2rem;line-height:1;border-radius:50%;}
+.stop-chip-btn:hover{opacity:1;background:rgba(0,0,0,0.06);}
+.dm-stops-suggest{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--white);border:1.5px solid var(--cream-deep);border-radius:12px;box-shadow:0 6px 20px var(--shadow);max-height:220px;overflow-y:auto;z-index:1200;display:none;}
+.dm-stops-suggest.show{display:block;}
+.dm-stop-option{display:flex;align-items:center;gap:0.5rem;padding:0.55rem 0.75rem;cursor:pointer;font-size:0.82rem;}
+.dm-stop-option:hover{background:var(--green-pale);}
+.dm-stop-option .dm-stop-county{font-size:0.7rem;color:var(--text-muted);margin-left:auto;}
+.dm-stop-option.dm-stop-freetext{color:var(--brown);font-style:italic;}
 .nav-dropdown-wrap:hover .nav-dropdown{display:flex;}
 .nav-dropdown-wrap.open .nav-dropdown{display:flex;}
 .dropdown-item{background:none;border:none;font-family:'Noto Sans TC',sans-serif;font-size:0.82rem;color:var(--text-light);padding:0.45rem 0.85rem;border-radius:10px;cursor:pointer;text-align:left;transition:all 0.15s;}
@@ -702,9 +713,13 @@ textarea.form-input{resize:vertical;min-height:80px;}
     <div class="form-group"><label class="form-label">參與的貝果</label>
       <div id="dm-members-check" style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.25rem;"></div>
     </div>
-    <div class="form-group"><label class="form-label">行程地點（按順序，逗號分隔）</label>
-      <input type="text" class="form-input" id="dm-stops" placeholder="山丘上的咖啡, 柳川水岸步道">
-      <p style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem;">請填入已新增的地點名稱</p>
+    <div class="form-group"><label class="form-label">行程地點（按順序）</label>
+      <div id="dm-stops-chips" style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.5rem;"></div>
+      <div style="position:relative;">
+        <input type="text" class="form-input" id="dm-stops-search" placeholder="輸入地點名稱搜尋…" autocomplete="off">
+        <div id="dm-stops-suggest" class="dm-stops-suggest"></div>
+      </div>
+      <p style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem;">從清單挑選會自動跟貝果地圖的評分連動；找不到的話可以直接新增純文字站點，或先去地圖新增這個地點</p>
     </div>
     <div class="form-group">
       <label class="form-label">整體行程心得 <span style="font-size:0.7rem;color:var(--text-muted);">（每位貝果都可以填，純文字）</span></label>
@@ -1607,10 +1622,89 @@ function renderTimelineStop(tl,tripId,index){
 }
 
 // ══ DIARY CRUD ══
+// ══ 行程地點自動完成 ══
+let dmStopsState=[]; // [{location_id, name}]
+function renderDmStopsChips(){
+  const el=document.getElementById('dm-stops-chips');
+  if(!el)return;
+  el.innerHTML=dmStopsState.map((s,i)=>
+    '<span class="stop-chip'+(s.location_id?'':' unmatched')+'" data-idx="'+i+'">'
+    +'<span class="stop-chip-num">'+(i+1)+'</span>'
+    +(s.location_id?'':'⚠️ ')
+    +s.name
+    +(i>0?'<button type="button" class="stop-chip-btn" data-action="stopup" data-idx="'+i+'" title="往前移">↑</button>':'')
+    +(i<dmStopsState.length-1?'<button type="button" class="stop-chip-btn" data-action="stopdown" data-idx="'+i+'" title="往後移">↓</button>':'')
+    +'<button type="button" class="stop-chip-btn" data-action="stopdel" data-idx="'+i+'" title="移除">✕</button>'
+    +'</span>'
+  ).join('');
+}
+function dmStopsAdd(locId,name){
+  dmStopsState.push({location_id:locId||null,name:name});
+  renderDmStopsChips();
+  const input=document.getElementById('dm-stops-search');
+  if(input){input.value='';input.focus();}
+  hideDmStopsSuggest();
+}
+function hideDmStopsSuggest(){
+  const box=document.getElementById('dm-stops-suggest');
+  if(box){box.classList.remove('show');box.innerHTML='';}
+}
+function renderDmStopsSuggest(query){
+  const box=document.getElementById('dm-stops-suggest');
+  if(!box)return;
+  query=query.trim();
+  if(!query){hideDmStopsSuggest();return;}
+  const matches=locations.filter(l=>l.name.includes(query)).slice(0,8);
+  let html=matches.map(l=>
+    '<div class="dm-stop-option" data-action="pickstop" data-locid="'+l.id+'" data-name="'+l.name.replace(/"/g,'&quot;')+'">📍 '+l.name+(l.county?'<span class="dm-stop-county">'+l.county+'</span>':'')+'</div>'
+  ).join('');
+  const exact=matches.some(l=>l.name===query);
+  if(!exact){
+    html+='<div class="dm-stop-option dm-stop-freetext" data-action="pickstop" data-locid="" data-name="'+query.replace(/"/g,'&quot;')+'">＋ 加入純文字站點「'+query+'」（不會連動地圖評分）</div>';
+  }
+  box.innerHTML=html;
+  box.classList.add('show');
+}
+function initDmStopsUI(){
+  const input=document.getElementById('dm-stops-search');
+  const box=document.getElementById('dm-stops-suggest');
+  const chipsEl=document.getElementById('dm-stops-chips');
+  if(!input||input.dataset.bound)return;
+  input.dataset.bound='1';
+  input.addEventListener('input',()=>renderDmStopsSuggest(input.value));
+  input.addEventListener('focus',()=>{if(input.value.trim())renderDmStopsSuggest(input.value);});
+  input.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){
+      e.preventDefault();
+      const first=box.querySelector('.dm-stop-option');
+      if(first){dmStopsAdd(first.dataset.locid||null,first.dataset.name);}
+    }else if(e.key==='Escape'){hideDmStopsSuggest();}
+  });
+  document.addEventListener('click',e=>{
+    if(!box.contains(e.target)&&e.target!==input)hideDmStopsSuggest();
+  });
+  box.addEventListener('click',e=>{
+    const opt=e.target.closest('[data-action="pickstop"]');
+    if(opt)dmStopsAdd(opt.dataset.locid||null,opt.dataset.name);
+  });
+  chipsEl.addEventListener('click',e=>{
+    const btn=e.target.closest('button[data-action]');
+    if(!btn)return;
+    const idx=parseInt(btn.dataset.idx);
+    if(btn.dataset.action==='stopdel')dmStopsState.splice(idx,1);
+    else if(btn.dataset.action==='stopup'&&idx>0)[dmStopsState[idx-1],dmStopsState[idx]]=[dmStopsState[idx],dmStopsState[idx-1]];
+    else if(btn.dataset.action==='stopdown'&&idx<dmStopsState.length-1)[dmStopsState[idx+1],dmStopsState[idx]]=[dmStopsState[idx],dmStopsState[idx+1]];
+    renderDmStopsChips();
+  });
+}
 function openAddDiary(){
   editingId.trip=null;
   document.getElementById('diary-modal-title').textContent='新增旅遊行程';
-  ['dm-title','dm-date','dm-end-date','dm-tags','dm-stops'].forEach(id=>document.getElementById(id).value='');
+  ['dm-title','dm-date','dm-end-date','dm-tags'].forEach(id=>document.getElementById(id).value='');
+  dmStopsState=[];
+  initDmStopsUI();
+  renderDmStopsChips();
+  document.getElementById('dm-stops-search').value='';
   renderDiaryMemberChecks([],{});
   document.getElementById('diary-modal-overlay').classList.add('show');
 }
@@ -1623,7 +1717,10 @@ function openEditDiary(id){
   document.getElementById('dm-end-date').value=d.end_date||'';
   document.getElementById('dm-tags').value=(d.tags||[]).join(', ');
   const tls=getTripLocations(id);
-  document.getElementById('dm-stops').value=tls.map(tl=>tl.location_name||'').join(', ');
+  dmStopsState=tls.map(tl=>({location_id:tl.location_id||null,name:tl.location_name||''}));
+  initDmStopsUI();
+  renderDmStopsChips();
+  document.getElementById('dm-stops-search').value='';
   const memberIds=getTripParticipants(id);
   const notes=getTripNotes(id).reduce((acc,n)=>{acc[n.member_id]=n.content;return acc;},{});
   renderDiaryMemberChecks(memberIds,notes);
@@ -1659,7 +1756,7 @@ async function saveDiary(){
   if(!title||!date)return alert('請填寫標題與日期');
   const memberIds=[...document.querySelectorAll('#dm-members-check input:checked')].map(cb=>cb.value);
   const tags=document.getElementById('dm-tags').value.split(',').map(s=>s.trim()).filter(Boolean);
-  const stopNames=document.getElementById('dm-stops').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const stops=dmStopsState.filter(s=>s.name);
   const notes={};
   members.forEach(m=>{
     const el=document.getElementById('dm-note-'+m.id);
@@ -1685,8 +1782,9 @@ async function saveDiary(){
       await sbPost('trip_participants',{trip_id:tripId,member_id:mid});
       tripParticipants.push({trip_id:tripId,member_id:mid});
     }
-    // Update trip_locations (always rebuild when stops field is not empty)
-    if(stopNames.length>0){
+    // Update trip_locations (always rebuild when there are stops)
+    let unmatched=[];
+    if(stops.length>0){
       // 先把舊的評分備份起來（用 location_name 當 key，避免 cascade delete 刪掉）
       const oldTls=tripLocations.filter(tl=>tl.trip_id===tripId);
       const savedRatings=[]; // [{location_name, rating}]
@@ -1700,12 +1798,12 @@ async function saveDiary(){
       await sbDelete('trip_locations','?trip_id=eq.'+tripId);
       tripLocations=tripLocations.filter(tl=>tl.trip_id!==tripId);
       tripLocationRatings=tripLocationRatings.filter(r=>!oldTls.some(tl=>tl.id===r.trip_location_id));
-      // 重新建立 trip_locations
+      // 重新建立 trip_locations（location_id 已在自動完成時選定，不再靠文字比對）
       const newTls=[];
-      for(let i=0;i<stopNames.length;i++){
-        const name=stopNames[i];
-        const loc=locations.find(x=>x.name===name);
-        const tlObj={id:uid(),trip_id:tripId,location_id:loc?loc.id:null,location_name:name,sort_order:i};
+      for(let i=0;i<stops.length;i++){
+        const stop=stops[i];
+        if(!stop.location_id)unmatched.push(stop.name);
+        const tlObj={id:uid(),trip_id:tripId,location_id:stop.location_id||null,location_name:stop.name,sort_order:i};
         const res=await sbPost('trip_locations',tlObj);
         const newTl=res?res[0]:tlObj;
         tripLocations.push(newTl);
@@ -1733,7 +1831,11 @@ async function saveDiary(){
         tripNotes.push(res?res[0]:noteObj);
       }
     }
-    setSyncStatus('ok','✅ 已儲存');
+    if(unmatched.length>0){
+      setSyncStatus('error','⚠️ 已儲存，但「'+unmatched.join('、')+'」是純文字站點，未連動貝果地圖，該站的評分不會跟地圖同步');
+    }else{
+      setSyncStatus('ok','✅ 已儲存');
+    }
     closeDiaryModal();currentDiaryFilter='全部';renderDiaries();renderHome();
   }catch(e){setSyncStatus('error','儲存失敗：'+e.message);console.error(e);}
 }
@@ -1930,6 +2032,14 @@ document.addEventListener('DOMContentLoaded',function(){
 
 // ══ PERSONAL REVIEW MODAL ══
 let prTargetLocId=null,prTargetTripLocId=null,prAuthedMemberId=null,prCurrentStars=0;
+function prefillPrForm(memberId){
+  let existing=null;
+  if(prTargetLocId)existing=locationRatings.find(r=>r.location_id===prTargetLocId&&r.member_id===memberId);
+  else if(prTargetTripLocId)existing=tripLocationRatings.find(r=>r.trip_location_id===prTargetTripLocId&&r.member_id===memberId);
+  prCurrentStars=existing?existing.stars:0;
+  document.getElementById('pr-comment').value=existing?(existing.comment||''):'';
+  document.querySelectorAll('#pr-stars .star-btn').forEach((b,i)=>b.classList.toggle('lit',i<prCurrentStars));
+}
 function openPrModal(locId,dummy,tripLocId){
   prTargetLocId=locId;prTargetTripLocId=tripLocId;prAuthedMemberId=null;prCurrentStars=0;
   document.getElementById('pr-pw-error').style.display='none';
@@ -1949,6 +2059,7 @@ function openPrModal(locId,dummy,tripLocId){
     document.querySelectorAll('#pr-stars .star-btn').forEach(btn=>{
       btn.onclick=function(){prCurrentStars=parseInt(this.dataset.s);document.querySelectorAll('#pr-stars .star-btn').forEach((b,i)=>b.classList.toggle('lit',i<prCurrentStars));};
     });
+    prefillPrForm(prAuthedMemberId);
   } else {
     // Not logged in: show password auth section
     document.getElementById('pr-auth-section').style.display='block';
@@ -1981,6 +2092,7 @@ async function verifyPrAuth(){
   document.querySelectorAll('#pr-stars .star-btn').forEach(btn=>{
     btn.onclick=function(){prCurrentStars=parseInt(this.dataset.s);document.querySelectorAll('#pr-stars .star-btn').forEach((b,i)=>b.classList.toggle('lit',i<prCurrentStars));};
   });
+  prefillPrForm(prAuthedMemberId);
 }
 async function savePrReview(){
   if(!prAuthedMemberId)return;
@@ -1989,14 +2101,26 @@ async function savePrReview(){
   try{
     setSyncStatus('syncing','儲存中…');
     if(prTargetLocId){
-      const obj={id:uid(),location_id:prTargetLocId,member_id:prAuthedMemberId,stars:prCurrentStars,comment};
-      const res=await sbPost('location_ratings',obj);
-      locationRatings.push(res?res[0]:obj);
+      const existing=locationRatings.find(r=>r.location_id===prTargetLocId&&r.member_id===prAuthedMemberId);
+      if(existing){
+        await sbPatch('location_ratings','?id=eq.'+existing.id,{stars:prCurrentStars,comment});
+        existing.stars=prCurrentStars;existing.comment=comment;
+      }else{
+        const obj={id:uid(),location_id:prTargetLocId,member_id:prAuthedMemberId,stars:prCurrentStars,comment};
+        const res=await sbPost('location_ratings',obj);
+        locationRatings.push(res?res[0]:obj);
+      }
       renderPlaceList();renderOsmMarkers();
     }else if(prTargetTripLocId){
-      const obj={id:uid(),trip_location_id:prTargetTripLocId,member_id:prAuthedMemberId,stars:prCurrentStars,comment};
-      const res=await sbPost('trip_location_ratings',obj);
-      tripLocationRatings.push(res?res[0]:obj);
+      const existing=tripLocationRatings.find(r=>r.trip_location_id===prTargetTripLocId&&r.member_id===prAuthedMemberId);
+      if(existing){
+        await sbPatch('trip_location_ratings','?id=eq.'+existing.id,{stars:prCurrentStars,comment});
+        existing.stars=prCurrentStars;existing.comment=comment;
+      }else{
+        const obj={id:uid(),trip_location_id:prTargetTripLocId,member_id:prAuthedMemberId,stars:prCurrentStars,comment};
+        const res=await sbPost('trip_location_ratings',obj);
+        tripLocationRatings.push(res?res[0]:obj);
+      }
       renderDiaries();
     }
     setSyncStatus('ok','✅ 評分已儲存');
