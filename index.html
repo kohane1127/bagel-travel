@@ -1061,7 +1061,8 @@ function renderOsmMarkers(){
   locations.forEach(loc=>{
     if(!loc.lat||!loc.lng)return;
     const marker=L.marker([parseFloat(loc.lat),parseFloat(loc.lng)],{icon:bagelIcon(typeEmoji(loc.type))});
-    marker.bindPopup(buildPopupHtml(loc),{maxWidth:280});
+    // 動態生成 popup 內容（點擊時才建，確保評分資料是最新的）
+    marker.bindPopup(()=>buildPopupHtml(loc),{maxWidth:280});
     marker.addTo(osmMap);
     marker._locId=loc.id;
     osmMarkers.push(marker);
