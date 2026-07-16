@@ -800,6 +800,20 @@ function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 function closeAllPopups(){
   osmMarkers.forEach(m=>{try{m.closePopup();}catch(e){}});
 }
+
+// 處理 popup 內的行程連結點擊（popup 不在一般事件委派範圍內）
+document.addEventListener('click',function(e){
+  const el=e.target.closest('[data-action="gotodiary"]');
+  if(el){
+    const tid=el.dataset.tid;
+    closeAllPopups();
+    doNav('diary');
+    setTimeout(()=>{
+      const entry=document.getElementById('diary-entry-'+tid);
+      if(entry)entry.scrollIntoView({behavior:'smooth'});
+    },350);
+  }
+});
 function jumpToMapLocation(locId){
   doNav('map');
   setTimeout(()=>{
@@ -1053,7 +1067,7 @@ function buildPopupHtml(loc){
         +'<span style="color:'+memberColor(r.member_id)+';font-weight:700;flex-shrink:0;">'+memberName(r.member_id)+'</span>'
         +'<span style="color:#C4956A;white-space:nowrap;">'+starsStr(r.stars)+'</span>'
         +(r.comment?'<span style="color:#7A6F62;white-space:pre-wrap;">'+r.comment+'</span>':'')
-        +(tripInfo?'<span title="來自行程：'+tripInfo.title+'（'+tripInfo.date+'）" onclick="closeAllPopups();doNav(\'diary\');setTimeout(()=>{const el=document.getElementById(\'diary-entry-'+tripInfo.id+'\');if(el)el.scrollIntoView({behavior:\'smooth\'});},350);" style="cursor:pointer;color:#7A9E7E;font-size:0.68rem;flex-shrink:0;white-space:nowrap;text-decoration:underline;text-underline-offset:2px;margin-left:auto;">🗓 '+tripInfo.title+'</span>':'')
+        +(tripInfo?'<span data-action="gotodiary" data-tid="'+tripInfo.id+'" title="來自行程：'+tripInfo.title+'（'+tripInfo.date+'）" style="cursor:pointer;color:#7A9E7E;font-size:0.68rem;flex-shrink:0;white-space:nowrap;text-decoration:underline;text-underline-offset:2px;margin-left:auto;">🗓 '+tripInfo.title+'</span>':'')
         +'</div>';
     });
     h+='</div>';
