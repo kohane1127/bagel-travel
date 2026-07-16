@@ -254,7 +254,8 @@ nav{display:flex;gap:0.15rem;align-items:center;}
 .timeline-stop-name{font-weight:500;font-size:0.875rem;margin-bottom:0.15rem;}
 .timeline-stop-type{font-size:0.7rem;color:var(--text-muted);margin-bottom:0.4rem;}
 .stop-reviews{display:flex;flex-direction:column;gap:0.3rem;}
-.stop-review-row{display:flex;align-items:flex-start;gap:0.5rem;font-size:0.78rem;color:var(--text-light);line-height:1.5;}
+.stop-review-row{display:flex;flex-direction:column;gap:0.15rem;font-size:0.78rem;color:var(--text-light);line-height:1.5;}
+.stop-review-head{display:flex;align-items:center;gap:0.5rem;}
 .stop-reviewer-chip{display:flex;align-items:center;gap:0.3rem;flex-shrink:0;}
 .chip-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
 .chip-name{font-size:0.72rem;font-weight:500;white-space:nowrap;}
@@ -1190,12 +1191,14 @@ function renderPlaceList(filter){
       +((loc.county||loc.location)?'<div class="place-location">📍 '+(loc.county||'')+(loc.location?' · '+loc.location:'')+'</div>':'')
       +'<div class="avg-stars"><span class="stars-display">'+(avg?starsStr(Math.round(avg)):'☆☆☆☆☆')+'</span><span class="avg-score">'+(avg||'尚無評價')+'</span></div>'
       +(ratings.length>0?'<div class="stop-reviews" style="margin:0.4rem 0;">'+ratings.map((r,ri)=>'<div class="stop-review-row">'
+        +'<div class="stop-review-head">'
         +'<div class="stop-reviewer-chip"><div class="chip-dot" style="background:'+memberColor(r.member_id)+'"></div>'
         +'<span class="chip-name">'+memberName(r.member_id)+'</span>'
         +'<span class="chip-stars">'+starsStr(r.stars)+'</span></div>'
-        +(r.comment?'<span style="white-space:pre-wrap;">'+r.comment+'</span>':'')
         +(!r.trip_location_id&&(isAdmin()||(currentMember&&r.member_id===currentMember.id))?'<button class="btn-sm" style="margin-left:auto;flex-shrink:0;background:var(--brown-pale);color:var(--brown);" data-action="bindrating" data-rid="'+r.id+'" data-locid="'+loc.id+'">🔗 綁定行程</button>':'')
         +(isAdmin()?'<button class="btn-sm btn-delete-sm" style="flex-shrink:0;" data-action="delrating" data-rid="'+r.id+'" data-locid="'+loc.id+'">✕</button>':'')
+        +'</div>'
+        +(r.comment?'<span style="white-space:pre-wrap;word-break:break-word;">'+r.comment+'</span>':'')
         +'</div>').join('')+'</div>':'')
       +(isLoggedIn()?'<div style="display:flex;gap:0.4rem;margin-top:0.5rem;flex-wrap:wrap;">'
       +'<button class="btn-sm" style="background:var(--brown-pale);color:var(--brown);" data-action="prreview" data-pid="'+loc.id+'">⭐ 我的評分</button>'
@@ -1624,11 +1627,13 @@ function renderTimelineStop(tl,tripId,index){
     +(type?'<div class="timeline-stop-type">'+typeEmoji(type)+' '+type+'</div>':'')
     +'<div class="stop-reviews">'
     +ratings.map((r,ri)=>'<div class="stop-review-row">'
+      +'<div class="stop-review-head">'
       +'<div class="stop-reviewer-chip"><div class="chip-dot" style="background:'+memberColor(r.member_id)+'"></div>'
       +'<span class="chip-name">'+memberName(r.member_id)+'</span>'
       +'<span class="chip-stars">'+starsStr(r.stars)+'</span></div>'
-      +(r.comment?'<span style="white-space:pre-wrap;">'+r.comment+'</span>':'')
       +(isAdmin()||(currentMember&&r.member_id===currentMember.id)?'<button class="btn-sm btn-delete-sm" style="margin-left:auto;flex-shrink:0;" data-action="deltlrating" data-rid="'+r.id+'">✕</button>':'')
+      +'</div>'
+      +(r.comment?'<span style="white-space:pre-wrap;word-break:break-word;">'+r.comment+'</span>':'')
       +'</div>').join('')
     +(ratings.length===0?'<span style="font-size:0.72rem;color:var(--text-muted);">尚無評價</span>':'')
     +'</div>'
