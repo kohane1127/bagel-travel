@@ -233,10 +233,10 @@ nav{display:flex;gap:0.15rem;align-items:center;}
 .diary-timeline{padding:1rem 1.5rem 1.25rem;}
 .timeline-stop{display:flex;gap:1rem;padding-bottom:1rem;}
 .timeline-stop:last-child{padding-bottom:0;}
-.timeline-left{display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:20px;}
-.timeline-dot{width:12px;height:12px;border-radius:50%;background:var(--green-light);border:2px solid var(--green);flex-shrink:0;}
-.timeline-stop:first-child .timeline-dot{background:var(--green);}
-.timeline-stop:last-child .timeline-dot{background:var(--brown);border-color:var(--brown);}
+.timeline-left{display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:22px;}
+.timeline-dot{width:22px;height:22px;border-radius:7px;background:linear-gradient(155deg,var(--green-light),var(--green));display:flex;align-items:center;justify-content:center;color:#fff;font-size:0.68rem;font-weight:700;flex-shrink:0;box-shadow:0 2px 4px rgba(122,158,126,0.35);}
+.timeline-stop:first-child .timeline-dot{background:linear-gradient(155deg,var(--green),#5d8261);}
+.timeline-stop:last-child .timeline-dot{background:linear-gradient(155deg,var(--brown-light),var(--brown));box-shadow:0 2px 4px rgba(196,149,106,0.35);}
 .timeline-line{width:2px;flex:1;background:repeating-linear-gradient(to bottom,var(--cream-deep) 0,var(--cream-deep) 4px,transparent 4px,transparent 8px);margin-top:2px;}
 .timeline-stop:last-child .timeline-line{display:none;}
 .timeline-content{flex:1;}
@@ -991,7 +991,7 @@ function renderTwMap(){
     };
     el.onmouseleave=()=>{el.setAttribute('fill',color);el.style.fill=color;document.getElementById('map-tooltip').style.display='none';};
     el.onmousemove=e=>{const tt=document.getElementById('map-tooltip');tt.style.left=(e.clientX+14)+'px';tt.style.top=(e.clientY-10)+'px';};
-    el.onclick=()=>doNav('map');
+    el.onclick=()=>goToCounty(name);
   });
   visited.sort((a,b)=>b.n-a.n);
   const listEl=document.getElementById('county-list-items');
@@ -1000,8 +1000,23 @@ function renderTwMap(){
     ?'<p style="font-size:0.75rem;color:#A09488;">新增地點後會自動更新</p>'
     :visited.map(v=>'<div class="county-list-item"><span>'+v.name+'</span><span class="county-badge">'+v.n+'</span></div>').join('');
   listEl.querySelectorAll('.county-list-item').forEach((el,i)=>{
-    el.addEventListener('click',()=>doNav('map'));
+    el.addEventListener('click',()=>goToCounty(visited[i].name));
   });
+}
+function goToCounty(name){
+  doNav('map');
+  setTimeout(()=>{
+    const input=document.querySelector('.sidebar-search');
+    if(input)input.value=name;
+    renderPlaceList(name);
+    if(osmMap){
+      const norm=normCounty(name);
+      const pts=locations.filter(p=>normCounty(p.county||'')===norm&&p.lat&&p.lng)
+        .map(p=>[parseFloat(p.lat),parseFloat(p.lng)]);
+      if(pts.length===1)osmMap.flyTo(pts[0],13,{duration:0.8});
+      else if(pts.length>1)osmMap.flyToBounds(pts,{padding:[40,40],duration:0.8});
+    }
+  },80);
 }
 function renderHome(){
   document.getElementById('stat-places').textContent=locations.length;
@@ -1063,11 +1078,13 @@ function buildPopupHtml(loc){
         const tl=tripLocations.find(x=>x.id===r.trip_location_id);
         if(tl){const trip=trips.find(x=>x.id===tl.trip_id);if(trip)tripInfo=trip;}
       }
-      h+='<div style="display:flex;align-items:flex-start;gap:0.35rem;font-size:0.78rem;">'
-        +'<span style="color:'+memberColor(r.member_id)+';font-weight:700;flex-shrink:0;">'+memberName(r.member_id)+'</span>'
+      h+='<div style="display:flex;flex-direction:column;gap:0.15rem;font-size:0.78rem;">'
+        +'<div style="display:flex;align-items:center;gap:0.35rem;">'
+        +'<span style="color:'+memberColor(r.member_id)+';font-weight:700;">'+memberName(r.member_id)+'</span>'
         +'<span style="color:#C4956A;white-space:nowrap;">'+starsStr(r.stars)+'</span>'
-        +(r.comment?'<span style="color:#7A6F62;white-space:pre-wrap;">'+r.comment+'</span>':'')
-        +(tripInfo?'<span data-action="gotodiary" data-tid="'+tripInfo.id+'" title="來自行程：'+tripInfo.title+'（'+tripInfo.date+'）" style="cursor:pointer;color:#7A9E7E;font-size:0.68rem;flex-shrink:0;white-space:nowrap;text-decoration:underline;text-underline-offset:2px;margin-left:auto;">🗓 '+tripInfo.title+'</span>':'')
+        +(tripInfo?'<span data-action="gotodiary" data-tid="'+tripInfo.id+'" title="來自行程：'+tripInfo.title+'（'+tripInfo.date+'）" style="cursor:pointer;color:#7A9E7E;font-size:0.75rem;margin-left:auto;flex-shrink:0;">🗓</span>':'')
+        +'</div>'
+        +(r.comment?'<span style="color:#7A6F62;white-space:pre-wrap;word-break:break-word;">'+r.comment+'</span>':'')
         +'</div>';
     });
     h+='</div>';
@@ -1539,7 +1556,7 @@ function renderDiaryList(tag){
       +((d.tags||[]).length?'<div class="diary-tags">'+d.tags.map(t=>'<span class="diary-tag">'+t+'</span>').join('')+'</div>':'')
       +(memberIds.length?'<div class="diary-members-row"><span style="margin-right:0.25rem;flex-shrink:0;">參與：</span><div style="display:flex;flex-wrap:wrap;gap:0.25rem;">'+memberIds.map(mid=>'<span class="member-pill"><span class="pill-dot" style="background:'+memberColor(mid)+'"></span>'+memberName(mid)+'</span>').join('')+'</div></div>':'')
       +(notes.length?'<div class="diary-notes">'+notes.map(n=>'<div class="diary-note-row"><span class="diary-note-dot" style="background:'+memberColor(n.member_id)+'"></span><span class="diary-note-name">'+memberName(n.member_id)+'</span><span style="white-space:pre-wrap;">'+n.content+'</span>'+(isAdmin()||(currentMember&&n.member_id===currentMember.id)?'<button class="btn-sm btn-delete-sm" data-action="delnote" data-nid="'+n.id+'">✕</button>':'')+'</div>').join('')+'</div>':'')
-      +(tls.length?'<div class="diary-timeline">'+tls.map(tl=>renderTimelineStop(tl,d.id)).join('')+'</div>':'')
+      +(tls.length?'<div class="diary-timeline">'+tls.map((tl,ti)=>renderTimelineStop(tl,d.id,ti)).join('')+'</div>':'')
       +'</div>';
   }).join('');
   el.onclick=function(e){
@@ -1556,7 +1573,7 @@ function renderDiaryList(tag){
     }
   };
 }
-function renderTimelineStop(tl,tripId){
+function renderTimelineStop(tl,tripId,index){
   // 合併 trip_location_ratings + location_ratings（地圖直接評分也顯示在行程裡）
   const tlRatings=getTripLocationRatings(tl.id);
   const directRatings=tl.location_id?locationRatings.filter(r=>r.location_id===tl.location_id):[];
@@ -1570,7 +1587,7 @@ function renderTimelineStop(tl,tripId){
   const name=tl.location_name||(loc?loc.name:'未知地點');
   const type=loc?loc.type:'';
   return '<div class="timeline-stop">'
-    +'<div class="timeline-left"><div class="timeline-dot"></div><div class="timeline-line"></div></div>'
+    +'<div class="timeline-left"><div class="timeline-dot">'+(typeof index==='number'?index+1:'')+'</div><div class="timeline-line"></div></div>'
     +'<div class="timeline-content">'
     +(tl.location_id?'<div class="timeline-stop-name">📍 <button style="background:none;border:none;padding:0;cursor:pointer;color:var(--green);text-decoration:underline;text-underline-offset:2px;font-size:inherit;font-family:inherit;" data-action="jumploc" data-locid="'+tl.location_id+'">'+name+'</button></div>':'<div class="timeline-stop-name">'+name+'</div>')
     +(type?'<div class="timeline-stop-type">'+typeEmoji(type)+' '+type+'</div>':'')
