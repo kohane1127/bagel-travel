@@ -257,6 +257,12 @@ nav{display:flex;gap:0.15rem;align-items:center;}
 .diary-controls{display:flex;gap:0.75rem;margin-bottom:1.75rem;flex-wrap:wrap;}
 .diary-filter-btn{background:var(--white);border:1.5px solid var(--cream-deep);color:var(--text-light);padding:0.35rem 1rem;border-radius:20px;font-family:'Noto Sans TC',sans-serif;font-size:0.8rem;cursor:pointer;transition:all 0.2s;}
 .diary-filter-btn.active,.diary-filter-btn:hover{background:var(--green-pale);border-color:var(--green-light);color:var(--green);}
+.diary-extra-toggle{background:none;border:none;color:var(--text-muted);font-size:0.76rem;cursor:pointer;padding:0.2rem 0.1rem;display:inline-flex;align-items:center;gap:0.25rem;}
+.diary-extra-toggle:hover{color:var(--green);}
+.diary-extra-chevron{font-size:0.65rem;transition:transform 0.2s;}
+.diary-extra-toggle.open .diary-extra-chevron{transform:rotate(180deg);}
+.diary-controls#diary-extra-filters .diary-filter-btn{font-size:0.74rem;padding:0.28rem 0.8rem;color:var(--text-muted);border-color:var(--cream-deep);}
+.diary-controls#diary-extra-filters .diary-filter-btn.active{color:var(--brown);background:var(--brown-pale);border-color:var(--brown-light);}
 .diary-entry{background:var(--white);border-radius:16px;margin-bottom:1.5rem;overflow:hidden;box-shadow:0 2px 10px var(--shadow);border:1.5px solid var(--cream-deep);}
 .diary-header{padding:1.25rem 1.5rem 0;display:flex;align-items:flex-start;gap:1rem;}
 .diary-date-block{background:var(--green);color:white;border-radius:10px;padding:0.4rem 0.7rem;text-align:center;flex-shrink:0;min-width:48px;}
@@ -508,6 +514,7 @@ textarea.form-input{resize:vertical;min-height:80px;}
         <button class="dropdown-item" onclick="document.querySelector('.nav-dropdown-wrap').classList.remove('open');doNav('diary');filterDiaries('中部',null);closeMobileNav();">🏔️ 中部</button>
         <button class="dropdown-item" onclick="document.querySelector('.nav-dropdown-wrap').classList.remove('open');doNav('diary');filterDiaries('南部',null);closeMobileNav();">🌊 南部</button>
         <button class="dropdown-item" onclick="document.querySelector('.nav-dropdown-wrap').classList.remove('open');doNav('diary');filterDiaries('東部',null);closeMobileNav();">🌿 東部</button>
+        <button class="dropdown-item" onclick="document.querySelector('.nav-dropdown-wrap').classList.remove('open');doNav('diary');filterDiaries('海外',null);closeMobileNav();">🌏 海外</button>
         <button class="dropdown-item" onclick="document.querySelector('.nav-dropdown-wrap').classList.remove('open');doNav('diary');filterDiaries('全部',null);closeMobileNav();">📋 全部</button>
       </div>
     </div>
@@ -645,7 +652,11 @@ textarea.form-input{resize:vertical;min-height:80px;}
       <button class="add-btn" onclick="openAddDiary()">＋ 新增行程</button>
     </div>
     <div class="diary-controls" id="diary-year-filters" style="margin-bottom:0.5rem;"></div>
-    <div class="diary-controls" id="diary-filters"></div>
+    <div class="diary-controls" id="diary-region-filters" style="margin-bottom:0.5rem;"></div>
+    <div id="diary-extra-filters-wrap" style="margin-bottom:1.25rem;">
+      <button type="button" class="diary-extra-toggle" id="diary-extra-toggle">🏷️ 更多標籤 <span class="diary-extra-chevron">▾</span></button>
+      <div class="diary-controls" id="diary-extra-filters" style="display:none;margin-top:0.5rem;"></div>
+    </div>
     <div id="diary-list"></div>
   </div>
 </div>
@@ -748,7 +759,7 @@ textarea.form-input{resize:vertical;min-height:80px;}
       <div class="form-group"><label class="form-label">開始日期 *</label><input type="date" class="form-input" id="dm-date"></div>
       <div class="form-group"><label class="form-label">結束日期 <span style="font-size:0.7rem;color:var(--text-muted);">（多日遊才填，單日留空）</span></label><input type="date" class="form-input" id="dm-end-date"></div>
     </div>
-    <div class="form-group"><label class="form-label">地區分類（含 北部/中部/南部/東部 可被篩選）</label><input type="text" class="form-input" id="dm-tags" placeholder="中部, 一日遊, 美食"></div>
+    <div class="form-group"><label class="form-label">地區分類（含 北部/中部/南部/東部/海外 可被篩選）</label><input type="text" class="form-input" id="dm-tags" placeholder="中部, 一日遊, 美食"></div>
     <div class="form-group"><label class="form-label">參與的貝果</label>
       <div id="dm-members-check" style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.25rem;"></div>
     </div>
@@ -1706,18 +1717,47 @@ function getTripLocations(tripId){return tripLocations.filter(tl=>tl.trip_id===t
 function getTripLocationRatings(tripLocId){return tripLocationRatings.filter(r=>r.trip_location_id===tripLocId);}
 function getTripNotes(tripId){return tripNotes.filter(n=>n.trip_id===tripId);}
 
+let strokeCollator;
+try{ strokeCollator=new Intl.Collator('zh-Hant-u-co-stroke'); }
+catch(e){ strokeCollator={compare:(a,b)=>a.localeCompare(b,'zh-Hant')}; }
+let diaryExtraTagsOpen=false;
 function renderDiaries(){
   const allTags=[...new Set(trips.flatMap(d=>d.tags||[]))];
-  const regions=['全部','北部','中部','南部','東部'];
-  const extras=allTags.filter(t=>!regions.includes(t));
-  const filtersEl=document.getElementById('diary-filters');
-  filtersEl.innerHTML=[...regions,...extras].map(t=>
+  const regions=['全部','北部','中部','南部','東部','海外'];
+  const extras=allTags.filter(t=>!regions.includes(t)).sort(strokeCollator.compare);
+  const regionEl=document.getElementById('diary-region-filters');
+  regionEl.innerHTML=regions.map(t=>
     '<button class="diary-filter-btn'+(t===currentDiaryFilter?' active':'')+'" data-tag="'+t+'">'+t+'</button>'
   ).join('');
-  filtersEl.onclick=function(e){
+  regionEl.onclick=function(e){
     const btn=e.target.closest('.diary-filter-btn');
     if(btn)filterDiaries(btn.dataset.tag,btn);
   };
+  const extraWrap=document.getElementById('diary-extra-filters-wrap');
+  const extraToggle=document.getElementById('diary-extra-toggle');
+  const extraEl=document.getElementById('diary-extra-filters');
+  if(extras.length===0){
+    extraWrap.style.display='none';
+  }else{
+    extraWrap.style.display='block';
+    if(extras.includes(currentDiaryFilter))diaryExtraTagsOpen=true; // 選中的剛好是次要標籤時自動展開，避免看不到目前選的是哪個
+    extraToggle.textContent='';
+    extraToggle.classList.toggle('open',diaryExtraTagsOpen);
+    extraToggle.innerHTML='🏷️ 更多標籤（'+extras.length+'）<span class="diary-extra-chevron">▾</span>';
+    extraToggle.onclick=function(){
+      diaryExtraTagsOpen=!diaryExtraTagsOpen;
+      extraEl.style.display=diaryExtraTagsOpen?'flex':'none';
+      extraToggle.classList.toggle('open',diaryExtraTagsOpen);
+    };
+    extraEl.style.display=diaryExtraTagsOpen?'flex':'none';
+    extraEl.innerHTML=extras.map(t=>
+      '<button class="diary-filter-btn'+(t===currentDiaryFilter?' active':'')+'" data-tag="'+t+'">'+t+'</button>'
+    ).join('');
+    extraEl.onclick=function(e){
+      const btn=e.target.closest('.diary-filter-btn');
+      if(btn)filterDiaries(btn.dataset.tag,btn);
+    };
+  }
   // 年份篩選
   const years=[...new Set(trips.map(d=>d.date?d.date.slice(0,4):null).filter(Boolean))].sort((a,b)=>b-a);
   const yearFiltersEl=document.getElementById('diary-year-filters');
