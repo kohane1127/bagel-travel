@@ -738,8 +738,9 @@ textarea.form-input{resize:vertical;min-height:80px;}
 </div>
 <div class="modal-overlay" id="review-modal-overlay">
   <div class="modal">
-    <h3>新增評價</h3>
-    <div class="form-group"><label class="form-label">評價人</label><select class="form-input" id="rm-reviewer"></select></div>
+    <h3 id="rm-modal-title">新增評價</h3>
+    <div class="form-group"><label class="form-label">評價人</label><select class="form-input" id="rm-reviewer" onchange="rmReviewerChanged()"></select></div>
+    <div id="rm-existing-hint" style="display:none;background:var(--cream);border-radius:10px;padding:0.5rem 0.7rem;font-size:0.76rem;color:var(--brown);margin-bottom:0.75rem;">這位貝果已經評過分了，儲存會直接更新那一則，不會重複新增。</div>
     <div class="form-group"><label class="form-label">星級</label>
       <div class="star-picker" id="rm-stars">
         <button class="star-btn" onclick="setStars(1)">★</button><button class="star-btn" onclick="setStars(2)">★</button>
@@ -750,7 +751,7 @@ textarea.form-input{resize:vertical;min-height:80px;}
     <div class="form-group"><label class="form-label">簡短評語</label><input type="text" class="form-input" id="rm-comment" placeholder="一句話描述這個地方"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeReviewModal()">取消</button>
-      <button class="btn-save" onclick="saveReview()">儲存</button>
+      <button class="btn-save" id="rm-save-btn" onclick="saveReview()">儲存</button>
     </div>
   </div>
 </div>
@@ -853,7 +854,11 @@ async function sb(table, method='GET', body=null, query=''){
     throw new Error(`${method} ${table}: ${res.status} ${err}`);
   }
   const text = await res.text();
-  return text ? JSON.parse(text) : null;
+  const result = text ? JSON.parse(text) : null;
+  if(method==='PATCH'&&Array.isArray(result)&&result.length===0){
+    throw new Error(`${table}: 更新失敗，資料庫回報 0 筆資料被更改（很可能是權限規則 RLS 擋下來了，不是網路或程式的問題）`);
+  }
+  return result;
 }
 
 async function sbGet(table, query=''){return sb(table,'GET',null,query);}
@@ -1485,6 +1490,7 @@ async function deletePlace(id){
 }
 
 // ══ RATINGS ══
+let rmEditingRatingId=null;
 async function openAddReview(locId, tripLocId, dummy){
   // Admin review modal
   currentStars=0;updateStarUI();
@@ -1493,8 +1499,25 @@ async function openAddReview(locId, tripLocId, dummy){
   document.getElementById('review-modal-overlay').classList.add('show');
   document.getElementById('review-modal-overlay').dataset.locId=locId||'';
   document.getElementById('review-modal-overlay').dataset.tripLocId=tripLocId||'';
+  rmReviewerChanged();
 }
-function closeReviewModal(){document.getElementById('review-modal-overlay').classList.remove('show');}
+function rmReviewerChanged(){
+  const memberId=document.getElementById('rm-reviewer').value;
+  const overlay=document.getElementById('review-modal-overlay');
+  const locId=overlay.dataset.locId;
+  const tripLocId=overlay.dataset.tripLocId;
+  let existing=null;
+  if(locId)existing=locationRatings.find(r=>r.location_id===locId&&r.member_id===memberId);
+  else if(tripLocId)existing=tripLocationRatings.find(r=>r.trip_location_id===tripLocId&&r.member_id===memberId);
+  rmEditingRatingId=existing?existing.id:null;
+  currentStars=existing?existing.stars:0;
+  document.getElementById('rm-comment').value=existing?(existing.comment||''):'';
+  updateStarUI();
+  document.getElementById('rm-existing-hint').style.display=existing?'block':'none';
+  document.getElementById('rm-save-btn').textContent=existing?'更新評價':'儲存';
+  document.getElementById('rm-modal-title').textContent=existing?'更新評價':'新增評價';
+}
+function closeReviewModal(){document.getElementById('review-modal-overlay').classList.remove('show');rmEditingRatingId=null;}
 function setStars(n){currentStars=n;updateStarUI();}
 function updateStarUI(){document.querySelectorAll('#rm-stars .star-btn').forEach((btn,i)=>btn.classList.toggle('lit',i<currentStars));}
 async function saveReview(){
@@ -1506,14 +1529,26 @@ async function saveReview(){
   const tripLocId=overlay.dataset.tripLocId;
   try{
     setSyncStatus('syncing','儲存中…');
-    if(locId){
-      const obj={id:uid(),location_id:locId,member_id:memberId,stars:currentStars,comment};
-      const res=await sbPost('location_ratings',obj);
-      locationRatings.push(res?res[0]:obj);
-    }else if(tripLocId){
-      const obj={id:uid(),trip_location_id:tripLocId,member_id:memberId,stars:currentStars,comment};
-      const res=await sbPost('trip_location_ratings',obj);
-      tripLocationRatings.push(res?res[0]:obj);
+    if(rmEditingRatingId){
+      if(locId){
+        await sbPatch('location_ratings','?id=eq.'+rmEditingRatingId,{stars:currentStars,comment});
+        const existing=locationRatings.find(r=>r.id===rmEditingRatingId);
+        if(existing){existing.stars=currentStars;existing.comment=comment;}
+      }else if(tripLocId){
+        await sbPatch('trip_location_ratings','?id=eq.'+rmEditingRatingId,{stars:currentStars,comment});
+        const existing=tripLocationRatings.find(r=>r.id===rmEditingRatingId);
+        if(existing){existing.stars=currentStars;existing.comment=comment;}
+      }
+    }else{
+      if(locId){
+        const obj={id:uid(),location_id:locId,member_id:memberId,stars:currentStars,comment};
+        const res=await sbPost('location_ratings',obj);
+        locationRatings.push(res?res[0]:obj);
+      }else if(tripLocId){
+        const obj={id:uid(),trip_location_id:tripLocId,member_id:memberId,stars:currentStars,comment};
+        const res=await sbPost('trip_location_ratings',obj);
+        tripLocationRatings.push(res?res[0]:obj);
+      }
     }
     setSyncStatus('ok','✅ 已儲存');
     closeReviewModal();renderPlaceList();renderDiaries();renderOsmMarkers();
