@@ -289,6 +289,11 @@ nav{display:flex;gap:0.15rem;align-items:center;}
 .timeline-stop-name{font-weight:500;font-size:0.875rem;margin-bottom:0.15rem;}
 .timeline-stop-type{font-size:0.7rem;color:var(--text-muted);margin-bottom:0.4rem;}
 .stop-reviews{display:flex;flex-direction:column;gap:0.3rem;}
+.stop-reviews-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;background:var(--cream);border:none;border-radius:8px;padding:0.4rem 0.65rem;font-size:0.76rem;color:var(--brown);font-weight:500;cursor:pointer;margin:0.35rem 0;}
+.stop-reviews-toggle:hover{background:var(--cream-deep);}
+.stop-reviews-toggle .diary-extra-chevron{transition:transform 0.2s;}
+.stop-reviews-toggle.open .diary-extra-chevron{transform:rotate(180deg);}
+.stop-reviews-body{display:flex;flex-direction:column;gap:0.5rem;}
 .stop-review-row{display:flex;flex-direction:column;gap:0.15rem;font-size:0.78rem;color:var(--text-light);line-height:1.5;}
 .stop-review-head{display:flex;align-items:center;gap:0.5rem;}
 .stop-reviewer-chip{display:flex;align-items:center;gap:0.3rem;flex-shrink:0;}
@@ -615,7 +620,13 @@ textarea.form-input{resize:vertical;min-height:80px;}
           <h2>所有地點</h2>
           <button class="add-btn" id="add-place-btn" onclick="openAddPlace()" style="display:none;">＋ 新增</button>
         </div>
-        <div id="place-type-filters" style="display:flex;flex-wrap:wrap;gap:0.35rem;padding:0.5rem 0.85rem 0.25rem;border-bottom:1px solid var(--cream-deep);"></div>
+        <div style="padding:0.5rem 0.85rem 0.25rem;border-bottom:1px solid var(--cream-deep);">
+          <div id="place-type-filters" style="display:flex;flex-wrap:wrap;gap:0.35rem;"></div>
+          <div id="place-type-extra-wrap" style="display:none;margin-top:0.35rem;">
+            <button type="button" class="diary-extra-toggle" id="place-type-extra-toggle"></button>
+            <div id="place-type-extra-filters" style="display:none;flex-wrap:wrap;gap:0.35rem;margin-top:0.35rem;"></div>
+          </div>
+        </div>
         <input type="text" class="search-box" placeholder="搜尋地點…" oninput="filterPlaces(this.value)">
       </div>
       <div class="place-list" id="place-list"></div>
@@ -1333,13 +1344,19 @@ function renderPlaceList(filter){
 }
 let currentTypeFilter='全部';
 function filterPlaces(val){renderPlaceList(val);}
+let placeTypeExtraOpen=false;
 function renderPlaceTypeFilters(){
   const el=document.getElementById('place-type-filters');
   if(!el)return;
-  const types=[...new Set(locations.map(l=>l.type).filter(Boolean))].sort();
-  el.innerHTML=['全部',...types].map(t=>
-    '<button class="diary-filter-btn'+(t===currentTypeFilter?' active':'')+'" data-action="settypefilter" data-type="'+t+'" style="font-size:0.72rem;padding:0.25rem 0.65rem;">'+t+'</button>'
-  ).join('');
+  const counts={};
+  locations.forEach(l=>{if(l.type)counts[l.type]=(counts[l.type]||0)+1;});
+  const allTypes=Object.keys(counts);
+  const PRIMARY_MAX=7;
+  const sortedByFreq=allTypes.sort((a,b)=>counts[b]-counts[a]||strokeCollator.compare(a,b));
+  const primaryTypes=sortedByFreq.slice(0,PRIMARY_MAX);
+  const extraTypes=sortedByFreq.slice(PRIMARY_MAX).sort(strokeCollator.compare);
+  const btnHtml=t=>'<button class="diary-filter-btn'+(t===currentTypeFilter?' active':'')+'" data-action="settypefilter" data-type="'+t+'" style="font-size:0.72rem;padding:0.25rem 0.65rem;">'+t+'</button>';
+  el.innerHTML=['全部',...primaryTypes].map(btnHtml).join('');
   if(!el.dataset.bound){
     el.dataset.bound='1';
     el.addEventListener('click',function(e){
@@ -1347,10 +1364,34 @@ function renderPlaceTypeFilters(){
       if(btn)setTypeFilter(btn.dataset.type);
     });
   }
+  const extraWrap=document.getElementById('place-type-extra-wrap');
+  const extraToggle=document.getElementById('place-type-extra-toggle');
+  const extraEl=document.getElementById('place-type-extra-filters');
+  if(extraTypes.length===0){
+    extraWrap.style.display='none';
+  }else{
+    extraWrap.style.display='block';
+    if(extraTypes.includes(currentTypeFilter))placeTypeExtraOpen=true;
+    extraToggle.classList.toggle('open',placeTypeExtraOpen);
+    extraToggle.innerHTML='🏷️ 更多類型（'+extraTypes.length+'）<span class="diary-extra-chevron">▾</span>';
+    extraToggle.onclick=function(){
+      placeTypeExtraOpen=!placeTypeExtraOpen;
+      extraEl.style.display=placeTypeExtraOpen?'flex':'none';
+      extraToggle.classList.toggle('open',placeTypeExtraOpen);
+    };
+    extraEl.style.display=placeTypeExtraOpen?'flex':'none';
+    extraEl.innerHTML=extraTypes.map(btnHtml).join('');
+    if(!extraEl.dataset.bound){
+      extraEl.dataset.bound='1';
+      extraEl.addEventListener('click',function(e){
+        const btn=e.target.closest('[data-action="settypefilter"]');
+        if(btn)setTypeFilter(btn.dataset.type);
+      });
+    }
+  }
 }
 function setTypeFilter(t){
   currentTypeFilter=t;
-  document.querySelectorAll('#place-type-filters .diary-filter-btn').forEach(b=>b.classList.toggle('active',b.textContent===t));
   renderPlaceList(document.querySelector('.sidebar-search')?.value||'');
 }
 function onPlaceClick(id){
@@ -1818,9 +1859,15 @@ function renderDiaryList(tag){
       else if(btn.dataset.action==='prreviewstop')openPrModal(null,null,btn.dataset.tlid);
       else if(btn.dataset.action==='deltlrating')deleteTripLocationRating(btn.dataset.rid);
       else if(btn.dataset.action==='jumploc')jumpToMapLocation(btn.dataset.locid);
+      else if(btn.dataset.action==='toggletlstop'){
+        if(expandedTimelineStops.has(btn.dataset.tlid))expandedTimelineStops.delete(btn.dataset.tlid);
+        else expandedTimelineStops.add(btn.dataset.tlid);
+        renderDiaries();
+      }
     }
   };
 }
+let expandedTimelineStops=new Set();
 function renderTimelineStop(tl,tripId,index){
   // 合併 trip_location_ratings + location_ratings（地圖直接評分也顯示在行程裡）
   const tlRatings=getTripLocationRatings(tl.id);
@@ -1834,11 +1881,16 @@ function renderTimelineStop(tl,tripId,index){
   const loc=locations.find(x=>x.id===tl.location_id);
   const name=tl.location_name||(loc?loc.name:'未知地點');
   const type=loc?loc.type:'';
+  const isOpen=expandedTimelineStops.has(tl.id);
+  const avg=avgStars(ratings);
+  const summary=ratings.length===0?'尚無評價':'★ '+avg+'　·　'+ratings.length+' 則評價';
   return '<div class="timeline-stop">'
     +'<div class="timeline-left"><div class="timeline-dot">'+(typeof index==='number'?index+1:'')+'</div><div class="timeline-line"></div></div>'
     +'<div class="timeline-content">'
     +(tl.location_id?'<div class="timeline-stop-name">📍 <button style="background:none;border:none;padding:0;cursor:pointer;color:var(--green);text-decoration:underline;text-underline-offset:2px;font-size:inherit;font-family:inherit;" data-action="jumploc" data-locid="'+tl.location_id+'">'+name+'</button></div>':'<div class="timeline-stop-name">'+name+'</div>')
     +(type?'<div class="timeline-stop-type">'+typeEmoji(type)+' '+type+'</div>':'')
+    +'<button type="button" class="stop-reviews-toggle'+(isOpen?' open':'')+'" data-action="toggletlstop" data-tlid="'+tl.id+'"><span>'+summary+'</span><span class="diary-extra-chevron">▾</span></button>'
+    +'<div class="stop-reviews-body" style="display:'+(isOpen?'block':'none')+';">'
     +'<div class="stop-reviews">'
     +ratings.map((r,ri)=>'<div class="stop-review-row">'
       +'<div class="stop-review-head">'
@@ -1853,6 +1905,7 @@ function renderTimelineStop(tl,tripId,index){
     +'</div>'
     +(isLoggedIn()?'<button class="diary-add-review-btn" data-action="prreviewstop" data-tlid="'+tl.id+'" style="background:var(--brown-pale);color:var(--brown);">⭐ 我的評分</button>':'')
     +(isAdmin()?'<button class="diary-add-review-btn" data-action="reviewstop" data-tlid="'+tl.id+'">＋ 新增評價（管理員）</button>':'')
+    +'</div>'
     +'</div></div>';
 }
 
