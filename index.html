@@ -272,10 +272,10 @@ nav{display:flex;gap:0.15rem;align-items:center;}
 .diary-title{font-family:'Noto Serif TC',serif;font-size:1.1rem;font-weight:600;margin-bottom:0.25rem;}
 .diary-meta{font-size:0.75rem;color:var(--text-muted);display:flex;gap:0.75rem;flex-wrap:wrap;}
 .diary-tags{padding:0.75rem 1.5rem;display:flex;gap:0.4rem;flex-wrap:wrap;}
-.diary-meta-toggle{margin:0 1.5rem;background:none;border:none;color:var(--text-muted);font-size:0.76rem;cursor:pointer;padding:0.4rem 0;display:flex;align-items:center;gap:0.3rem;}
-.diary-meta-toggle:hover{color:var(--green);}
-.diary-meta-toggle .diary-extra-chevron{transition:transform 0.2s;font-size:0.65rem;}
-.diary-meta-toggle.open .diary-extra-chevron{transform:rotate(180deg);}
+.diary-stops-toggle{width:calc(100% - 3rem);margin:0.5rem 1.5rem 1rem;background:var(--cream);border:none;border-radius:10px;padding:0.55rem 0.85rem;font-size:0.82rem;font-weight:600;color:var(--brown);cursor:pointer;display:flex;align-items:center;justify-content:space-between;}
+.diary-stops-toggle:hover{background:var(--cream-deep);}
+.diary-stops-toggle .diary-extra-chevron{transition:transform 0.2s;}
+.diary-stops-toggle.open .diary-extra-chevron{transform:rotate(180deg);}
 .diary-tag{font-size:0.7rem;padding:0.15rem 0.55rem;border-radius:10px;background:var(--brown-pale);color:var(--brown);}
 .diary-members-row{padding:0 1.5rem 1rem;display:flex;gap:0.4rem;align-items:center;font-size:0.75rem;color:var(--text-muted);}
 .member-pill{display:flex;align-items:center;gap:0.3rem;background:var(--cream);border-radius:20px;padding:0.15rem 0.5rem;font-size:0.72rem;}
@@ -1846,13 +1846,11 @@ function renderDiaryList(tag){
         +'<button class="btn-sm btn-delete-sm" data-action="deld" data-did="'+d.id+'">🗑</button>':'')
       +'</div>'
       +'</div>'
-      +(((d.tags||[]).length||memberIds.length)?'<button type="button" class="diary-meta-toggle'+(expandedDiaryMeta.has(d.id)?' open':'')+'" data-action="togglediarymeta" data-did="'+d.id+'"><span>🏷️ 標籤與參與者</span><span class="diary-extra-chevron">▾</span></button>':'')
-      +'<div class="diary-meta-body" style="display:'+(expandedDiaryMeta.has(d.id)?'block':'none')+';">'
       +((d.tags||[]).length?'<div class="diary-tags">'+d.tags.map(t=>'<span class="diary-tag">'+t+'</span>').join('')+'</div>':'')
       +(memberIds.length?'<div class="diary-members-row"><span style="margin-right:0.25rem;flex-shrink:0;">參與：</span><div style="display:flex;flex-wrap:wrap;gap:0.25rem;">'+memberIds.map(mid=>'<span class="member-pill"><span class="pill-dot" style="background:'+memberColor(mid)+'"></span>'+memberName(mid)+'</span>').join('')+'</div></div>':'')
-      +'</div>'
       +(notes.length?'<div class="diary-notes">'+notes.map(n=>'<div class="diary-note-row"><span class="diary-note-dot" style="background:'+memberColor(n.member_id)+'"></span><span class="diary-note-name">'+memberName(n.member_id)+'</span><span style="white-space:pre-wrap;">'+n.content+'</span>'+(isAdmin()||(currentMember&&n.member_id===currentMember.id)?'<button class="btn-sm btn-delete-sm" data-action="delnote" data-nid="'+n.id+'">✕</button>':'')+'</div>').join('')+'</div>':'')
-      +(tls.length?'<div class="diary-timeline">'+tls.map((tl,ti)=>renderTimelineStop(tl,d.id,ti)).join('')+'</div>':'')
+      +(tls.length?'<button type="button" class="diary-stops-toggle'+(expandedDiaryStops.has(d.id)?' open':'')+'" data-action="togglediarystops" data-did="'+d.id+'"><span>📍 '+tls.length+' 個地點</span><span class="diary-extra-chevron">▾</span></button>':'')
+      +(tls.length?'<div class="diary-timeline" style="display:'+(expandedDiaryStops.has(d.id)?'block':'none')+';">'+tls.map((tl,ti)=>renderTimelineStop(tl,d.id,ti)).join('')+'</div>':'')
       +'</div>';
   }).join('');
   el.onclick=function(e){
@@ -1866,9 +1864,9 @@ function renderDiaryList(tag){
       else if(btn.dataset.action==='prreviewstop')openPrModal(null,null,btn.dataset.tlid);
       else if(btn.dataset.action==='deltlrating')deleteTripLocationRating(btn.dataset.rid);
       else if(btn.dataset.action==='jumploc')jumpToMapLocation(btn.dataset.locid);
-      else if(btn.dataset.action==='togglediarymeta'){
-        if(expandedDiaryMeta.has(btn.dataset.did))expandedDiaryMeta.delete(btn.dataset.did);
-        else expandedDiaryMeta.add(btn.dataset.did);
+      else if(btn.dataset.action==='togglediarystops'){
+        if(expandedDiaryStops.has(btn.dataset.did))expandedDiaryStops.delete(btn.dataset.did);
+        else expandedDiaryStops.add(btn.dataset.did);
         renderDiaries();
       }
       else if(btn.dataset.action==='toggletlstop'){
@@ -1880,7 +1878,7 @@ function renderDiaryList(tag){
   };
 }
 let expandedTimelineStops=new Set();
-let expandedDiaryMeta=new Set();
+let expandedDiaryStops=new Set();
 function renderTimelineStop(tl,tripId,index){
   // 合併 trip_location_ratings + location_ratings（地圖直接評分也顯示在行程裡）
   const tlRatings=getTripLocationRatings(tl.id);
