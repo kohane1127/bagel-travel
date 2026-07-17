@@ -217,6 +217,25 @@ nav{display:flex;gap:0.15rem;align-items:center;}
 .member-name-lg{font-family:'Noto Serif TC',serif;font-size:1.05rem;font-weight:600;margin-bottom:0.2rem;}
 .member-tagline{font-size:0.8rem;color:var(--text-muted);margin-bottom:1rem;line-height:1.5;font-style:italic;}
 .member-bio{font-size:0.825rem;color:var(--text-light);line-height:1.7;margin-bottom:1rem;}
+.msgboard{margin-bottom:1rem;border-top:1px dashed var(--cream-deep);padding-top:0.75rem;text-align:left;}
+.msgboard-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;background:var(--cream);border:none;border-radius:10px;padding:0.5rem 0.75rem;font-size:0.8rem;font-weight:500;color:var(--text-light);cursor:pointer;}
+.msgboard-toggle:hover{background:var(--cream-deep);}
+.msgboard-chevron{transition:transform 0.2s;font-size:0.7rem;}
+.msgboard-toggle.open .msgboard-chevron{transform:rotate(180deg);}
+.msgboard-body{padding-top:0.6rem;}
+.msgboard-empty,.msgboard-hint{font-size:0.75rem;color:var(--text-muted);font-style:italic;padding:0.3rem 0.1rem 0.6rem;}
+.msgboard-list{display:flex;flex-direction:column;gap:0.5rem;margin-bottom:0.6rem;max-height:260px;overflow-y:auto;}
+.msgboard-bubble{display:flex;gap:0.5rem;align-items:flex-start;}
+.msgboard-dot{width:22px;height:22px;border-radius:50%;flex-shrink:0;margin-top:0.15rem;}
+.msgboard-bubble-body{background:var(--cream);border-radius:4px 14px 14px 14px;padding:0.45rem 0.65rem;flex:1;min-width:0;}
+.msgboard-bubble-head{display:flex;align-items:center;justify-content:space-between;gap:0.4rem;margin-bottom:0.15rem;}
+.msgboard-author{font-size:0.72rem;font-weight:700;color:var(--green);}
+.msgboard-del{background:none;border:none;cursor:pointer;color:var(--text-muted);opacity:0.5;font-size:0.68rem;padding:0.1rem 0.2rem;}
+.msgboard-del:hover{opacity:1;color:var(--red,#c0392b);}
+.msgboard-content{font-size:0.8rem;color:var(--text);line-height:1.55;white-space:pre-wrap;word-break:break-word;}
+.msgboard-compose{display:flex;flex-direction:column;gap:0.4rem;}
+.msgboard-input{width:100%;border:1.5px solid var(--cream-deep);border-radius:10px;padding:0.5rem 0.65rem;font-size:0.8rem;font-family:inherit;resize:vertical;min-height:52px;box-sizing:border-box;}
+.msgboard-input:focus{outline:none;border-color:var(--green-light);}
 .member-prefs{display:flex;flex-wrap:wrap;gap:0.4rem;}
 .pref-tag{font-size:0.7rem;padding:0.2rem 0.6rem;border-radius:10px;background:var(--cream-deep);color:var(--text-light);}
 .member-stats{margin-top:1rem;padding-top:0.75rem;border-top:1px dashed var(--cream-deep);}
@@ -803,6 +822,8 @@ let tripLocations = [];
 let tripLocationRatings = [];
 let tripParticipants = [];
 let tripNotes = [];
+let memberMessages = [];
+let expandedMsgBoards = new Set();
 
 let editMode = false;
 let currentStars = 0;
@@ -908,6 +929,12 @@ async function loadAll(){
       sbGet('trip_location_ratings','?order=created_at'),
       sbGet('trip_notes','?order=updated_at'),
     ]);
+    try{
+      memberMessages=await sbGet('member_messages','?order=created_at');
+    }catch(e){
+      console.warn('[member_messages] 資料表可能還沒建立：',e.message);
+      memberMessages=[];
+    }
     setSyncStatus('ok','✅ 已載入');
     await initAuth();
     // 資料載完後重新比對 currentMember（initAuth 執行時 members 可能還是空的）
@@ -1381,6 +1408,75 @@ async function deleteTripLocationRating(rid){
 }
 
 // ══ MEMBERS ══
+function renderMemberMessageBoard(m){
+  const msgs=memberMessages.filter(x=>x.target_member_id===m.id).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+  const isOwnBoard=currentMember&&currentMember.id===m.id;
+  const myMsg=currentMember?msgs.find(x=>x.author_member_id===currentMember.id):null;
+  const isOpen=expandedMsgBoards.has(m.id);
+  const esc=s=>(s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  let h='<div class="msgboard">';
+  h+='<button type="button" class="msgboard-toggle'+(isOpen?' open':'')+'" data-action="togglemsgboard" data-mid="'+m.id+'">'
+    +'<span>💬 留言板'+(msgs.length?'（'+msgs.length+'）':'')+'</span><span class="msgboard-chevron">▾</span></button>';
+  h+='<div class="msgboard-body" style="display:'+(isOpen?'block':'none')+';">';
+  if(msgs.length===0){
+    h+='<div class="msgboard-empty">還沒有留言，來當第一個吧！</div>';
+  }else{
+    h+='<div class="msgboard-list">'+msgs.map(msg=>{
+      const canDel=isAdmin()||(currentMember&&currentMember.id===msg.author_member_id);
+      return '<div class="msgboard-bubble">'
+        +'<div class="msgboard-dot" style="background:'+memberColor(msg.author_member_id)+'"></div>'
+        +'<div class="msgboard-bubble-body">'
+        +'<div class="msgboard-bubble-head"><span class="msgboard-author">'+memberName(msg.author_member_id)+'</span>'
+        +(canDel?'<button type="button" class="msgboard-del" data-action="delmsg" data-msgid="'+msg.id+'" title="刪除">✕</button>':'')
+        +'</div>'
+        +'<div class="msgboard-content">'+esc(msg.content)+'</div>'
+        +'</div></div>';
+    }).join('')+'</div>';
+  }
+  if(!isOwnBoard){
+    if(!currentMember){
+      h+='<div class="msgboard-hint">登入後可以留言喔</div>';
+    }else{
+      h+='<div class="msgboard-compose">'
+        +'<textarea class="msgboard-input" data-mid="'+m.id+'" placeholder="留一句話給'+m.name+'…" maxlength="200">'+(myMsg?esc(myMsg.content):'')+'</textarea>'
+        +'<button type="button" class="btn-sm btn-save" style="align-self:flex-end;" data-action="savemsg" data-mid="'+m.id+'">'+(myMsg?'更新留言':'送出留言')+'</button>'
+        +'</div>';
+    }
+  }
+  h+='</div></div>';
+  return h;
+}
+async function saveMemberMessage(targetId,content){
+  if(!currentMember)return alert('請先登入才能留言。');
+  content=content.trim();
+  if(!content)return alert('留言不能是空的喔');
+  if(content.length>200)return alert('留言太長了，麻煩精簡一點（200 字以內）');
+  try{
+    setSyncStatus('syncing','送出中…');
+    const existing=memberMessages.find(x=>x.target_member_id===targetId&&x.author_member_id===currentMember.id);
+    if(existing){
+      await sbPatch('member_messages','?id=eq.'+existing.id,{content});
+      existing.content=content;
+    }else{
+      const obj={id:uid(),target_member_id:targetId,author_member_id:currentMember.id,content};
+      const res=await sbPost('member_messages',obj);
+      memberMessages.push(res?res[0]:obj);
+    }
+    expandedMsgBoards.add(targetId);
+    setSyncStatus('ok','✅ 留言已送出');
+    renderMembers();
+  }catch(e){
+    setSyncStatus('error','留言失敗：'+e.message);
+  }
+}
+async function deleteMemberMessage(id){
+  if(!confirm('確定要刪除這則留言？'))return;
+  try{
+    await sbDelete('member_messages','?id=eq.'+id);
+    memberMessages=memberMessages.filter(x=>x.id!==id);
+    renderMembers();
+  }catch(e){alert('刪除失敗：'+e.message);}
+}
 function renderMembers(){
   const addBtn=document.getElementById('add-member-btn');
   if(addBtn)addBtn.style.display=isAdmin()?'inline-block':'none';
@@ -1401,6 +1497,7 @@ function renderMembers(){
       +'<div class="member-name-lg">'+m.name+'</div>'
       +(m.tagline?'<div class="member-tagline">"'+m.tagline+'"</div>':'')
       +(m.bio?'<div class="member-bio">'+m.bio+'</div>':'')
+      +renderMemberMessageBoard(m)
       +(prefs.length?'<div class="member-prefs">'+prefs.map(p=>'<span class="pref-tag">'+p+'</span>').join('')+'</div>':'')
       +'<div class="member-stats"><div class="member-stat-n">'+rc+'</div><div class="member-stat-l">則評價</div></div>'
       +(currentMember&&currentMember.id===m.id&&!isAdmin()?'<div style="margin-top:0.5rem;"><button class="btn-sm btn-edit-sm" data-action="editm" data-mid="'+m.id+'">✏️ 編輯我的資料</button></div>':'')
@@ -1415,6 +1512,16 @@ function renderMembers(){
     if(btn){
       if(btn.dataset.action==='editm')openEditMember(btn.dataset.mid);
       else if(btn.dataset.action==='delm')deleteMember(btn.dataset.mid);
+      else if(btn.dataset.action==='togglemsgboard'){
+        if(expandedMsgBoards.has(btn.dataset.mid))expandedMsgBoards.delete(btn.dataset.mid);
+        else expandedMsgBoards.add(btn.dataset.mid);
+        renderMembers();
+      }
+      else if(btn.dataset.action==='savemsg'){
+        const ta=btn.closest('.msgboard-compose').querySelector('.msgboard-input');
+        saveMemberMessage(btn.dataset.mid,ta.value);
+      }
+      else if(btn.dataset.action==='delmsg')deleteMemberMessage(btn.dataset.msgid);
       return;
     }
     const av=e.target.closest('.member-avatar-lg[data-mid]');
