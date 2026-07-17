@@ -92,6 +92,14 @@ nav{display:flex;gap:0.15rem;align-items:center;}
 .county-list-item{display:flex;align-items:center;justify-content:space-between;padding:0.35rem 0.7rem;border-radius:8px;background:var(--cream);font-size:0.78rem;cursor:pointer;transition:background 0.15s;}
 .county-list-item:hover{background:var(--cream-deep);}
 .county-badge{background:var(--green);color:white;border-radius:10px;font-size:0.68rem;padding:0.1rem 0.45rem;font-weight:600;}
+.overseas-section{margin-top:1.75rem;}
+.overseas-section>h2{font-family:'Noto Serif TC',serif;font-size:1.05rem;font-weight:600;margin-bottom:1rem;}
+.overseas-list{display:flex;flex-wrap:wrap;gap:0.7rem;}
+.overseas-card{display:flex;align-items:center;gap:0.6rem;background:var(--white);border:1.5px solid var(--cream-deep);border-radius:14px;padding:0.75rem 1.1rem;cursor:pointer;transition:transform 0.15s,box-shadow 0.15s;min-width:140px;}
+.overseas-card:hover{transform:translateY(-2px);box-shadow:0 4px 14px var(--shadow);border-color:var(--green-light);}
+.overseas-card-flag{font-size:1.6rem;line-height:1;}
+.overseas-card-name{font-weight:600;font-size:0.88rem;color:var(--text);}
+.overseas-card-count{font-size:0.72rem;color:var(--text-muted);}
 
 /* MAP VIEW — interactive map with pins */
 .map-layout{display:grid;grid-template-columns:320px 1fr;height:calc(100vh - 64px);}
@@ -584,6 +592,10 @@ textarea.form-input{resize:vertical;min-height:80px;}
         </div>
             </div>
     </div>
+    <div class="overseas-section" id="overseas-section" style="display:none;">
+      <h2>🌏 海外足跡</h2>
+      <div class="overseas-list" id="overseas-list"></div>
+    </div>
   </div>
 </div>
 
@@ -659,7 +671,12 @@ textarea.form-input{resize:vertical;min-height:80px;}
       <div class="form-group"><label class="form-label">地點名稱 *</label><input type="text" class="form-input" id="pm-name" placeholder="例：誠品書店"></div>
       <div class="form-group"><label class="form-label">類型</label><input type="text" class="form-input" id="pm-type" placeholder="咖啡廳、餐廳…"></div>
     </div>
-    <div class="form-group"><label class="form-label">縣市</label>
+    <div class="form-group"><label class="form-label">國家 <span style="font-weight:400;color:var(--text-muted);">（留空＝台灣）</span></label>
+      <input type="text" class="form-input" id="pm-country" list="pm-country-options" placeholder="台灣（留空即可）">
+      <datalist id="pm-country-options"><option value="日本"><option value="韓國"><option value="台灣"></datalist>
+      <p style="font-size:0.71rem;color:var(--text-muted);margin-top:0.3rem;">海外地點才需要填，首頁縣市地圖只算台灣地點，海外的會另外用國家小卡呈現。海外地點的縣市可以不選，把城市／地區名稱寫在下面「詳細地址」就好</p>
+    </div>
+    <div class="form-group"><label class="form-label">縣市 <span style="font-weight:400;color:var(--text-muted);">（僅台灣地點適用）</span></label>
       <select class="form-input" id="pm-county">
         <option value="">請選擇縣市</option>
         <option>台北市</option><option>新北市</option><option>基隆市</option><option>桃園市</option>
@@ -1073,11 +1090,51 @@ function goToCounty(name){
     }
   },80);
 }
+const COUNTRY_FLAGS={'日本':'🇯🇵','韓國':'🇰🇷','台灣':'🇹🇼','泰國':'🇹🇭','越南':'🇻🇳','新加坡':'🇸🇬','馬來西亞':'🇲🇾','香港':'🇭🇰','澳門':'🇲🇴','中國':'🇨🇳','美國':'🇺🇸','英國':'🇬🇧','法國':'🇫🇷','義大利':'🇮🇹','德國':'🇩🇪','澳洲':'🇦🇺'};
+function countryFlag(name){return COUNTRY_FLAGS[name]||'🌍';}
+function renderOverseas(){
+  const section=document.getElementById('overseas-section');
+  const listEl=document.getElementById('overseas-list');
+  if(!section||!listEl)return;
+  const groups={};
+  locations.forEach(p=>{
+    const c=(p.country||'').trim();
+    if(!c||c==='台灣')return;
+    groups[c]=(groups[c]||0)+1;
+  });
+  const countries=Object.keys(groups).sort((a,b)=>groups[b]-groups[a]);
+  if(countries.length===0){section.style.display='none';return;}
+  section.style.display='block';
+  listEl.innerHTML=countries.map(c=>
+    '<div class="overseas-card" data-country="'+c+'">'
+    +'<div class="overseas-card-flag">'+countryFlag(c)+'</div>'
+    +'<div><div class="overseas-card-name">'+c+'</div><div class="overseas-card-count">'+groups[c]+' 個地點</div></div>'
+    +'</div>'
+  ).join('');
+  listEl.querySelectorAll('.overseas-card').forEach(el=>{
+    el.onclick=()=>goToCountryFilter(el.dataset.country);
+  });
+}
+function goToCountryFilter(country){
+  doNav('map');
+  setTimeout(()=>{
+    const input=document.querySelector('.sidebar-search');
+    if(input)input.value=country;
+    renderPlaceList(country);
+    if(osmMap){
+      const pts=locations.filter(p=>(p.country||'').trim()===country&&p.lat&&p.lng)
+        .map(p=>[parseFloat(p.lat),parseFloat(p.lng)]);
+      if(pts.length===1)osmMap.flyTo(pts[0],11,{duration:0.8});
+      else if(pts.length>1)osmMap.flyToBounds(pts,{padding:[40,40],duration:0.8});
+    }
+  },80);
+}
 function renderHome(){
   document.getElementById('stat-places').textContent=locations.length;
   document.getElementById('stat-trips').textContent=trips.length;
   document.getElementById('stat-members').textContent=members.length;
   renderTwMap();
+  renderOverseas();
 }
 
 // ══ OSM MAP ══
@@ -1121,6 +1178,7 @@ function buildPopupHtml(loc){
   h+='<div style="font-weight:700;font-size:0.95rem;color:#4A4035;margin-bottom:0.3rem;">'+loc.name+'</div>';
   const mp=[];
   if(loc.type)mp.push('<span style="background:#D6E8D8;color:#7A9E7E;font-size:0.68rem;padding:0.1rem 0.4rem;border-radius:6px;">'+loc.type+'</span>');
+  if(loc.country)mp.push('<span style="color:#A09488;font-size:0.72rem;">'+countryFlag(loc.country)+' '+loc.country+'</span>');
   if(loc.county)mp.push('<span style="color:#A09488;font-size:0.72rem;">'+loc.county+'</span>');
   if(avg)mp.push('<span style="color:#C4956A;font-size:0.72rem;">★ '+avg+'</span>');
   if(mp.length)h+='<div style="display:flex;gap:0.35rem;flex-wrap:wrap;align-items:center;margin-bottom:0.5rem;">'+mp.join('')+'</div>';
@@ -1208,7 +1266,7 @@ function renderPlaceList(filter){
   if(addBtn)addBtn.style.display=currentUser?'inline-block':'none';
   const list=document.getElementById('place-list');
   const locs=locations.filter(p=>{
-    if(filter&&!p.name.includes(filter)&&!(p.location||'').includes(filter)&&!(p.county||'').includes(filter)&&!(p.type||'').includes(filter))return false;
+    if(filter&&!p.name.includes(filter)&&!(p.location||'').includes(filter)&&!(p.county||'').includes(filter)&&!(p.type||'').includes(filter)&&!(p.country||'').includes(filter))return false;
     if(currentTypeFilter!=='全部'&&p.type!==currentTypeFilter)return false;
     return true;
   });
@@ -1222,7 +1280,7 @@ function renderPlaceList(filter){
     const avg=avgStars(ratings);
     return '<div class="place-card" id="pc-'+loc.id+'" data-pid="'+loc.id+'">'
       +'<div class="place-card-header"><div class="place-name">'+loc.name+'</div>'+(loc.type?'<span class="place-type">'+loc.type+'</span>':'')+'</div>'
-      +((loc.county||loc.location)?'<div class="place-location">📍 '+(loc.county||'')+(loc.location?' · '+loc.location:'')+'</div>':'')
+      +((loc.country||loc.county||loc.location)?'<div class="place-location">📍 '+(loc.country?loc.country+(loc.county||loc.location?' · ':''):'')+(loc.county||'')+(loc.location?(loc.county?' · ':'')+loc.location:'')+'</div>':'')
       +'<div class="avg-stars"><span class="stars-display">'+(avg?starsStr(Math.round(avg)):'☆☆☆☆☆')+'</span><span class="avg-score">'+(avg||'尚無評價')+'</span></div>'
       +(ratings.length>0?'<div class="stop-reviews" style="margin:0.4rem 0;">'+ratings.map((r,ri)=>'<div class="stop-review-row">'
         +'<div class="stop-review-head">'
@@ -1296,7 +1354,7 @@ function onPlaceClick(id){
 function openAddPlace(){
   editingId.location=null;
   document.getElementById('place-modal-title').textContent='新增地點';
-  ['pm-name','pm-type','pm-location','pm-gmaps','pm-lat','pm-lng'].forEach(id=>document.getElementById(id).value='');
+  ['pm-name','pm-type','pm-location','pm-gmaps','pm-lat','pm-lng','pm-country'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('pm-county').value='';
   document.getElementById('place-modal-overlay').classList.add('show');
   setTimeout(()=>initMiniMap(null,null),100);
@@ -1308,6 +1366,7 @@ function openEditPlace(id){
   document.getElementById('pm-name').value=loc.name;
   document.getElementById('pm-type').value=loc.type||'';
   document.getElementById('pm-county').value=loc.county||'';
+  document.getElementById('pm-country').value=loc.country||'';
   document.getElementById('pm-location').value=loc.location||'';
   document.getElementById('pm-gmaps').value=loc.gmaps||'';
   document.getElementById('pm-lat').value=loc.lat||'';
@@ -1330,6 +1389,7 @@ async function savePlace(){
     id: editingId.location||uid(),
     name,
     type:document.getElementById('pm-type').value.trim(),
+    country:document.getElementById('pm-country').value.trim()||null,
     county:document.getElementById('pm-county').value,
     location:document.getElementById('pm-location').value.trim(),
     gmaps:document.getElementById('pm-gmaps').value.trim(),
