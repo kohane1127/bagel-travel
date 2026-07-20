@@ -1921,9 +1921,10 @@ function renderDiaryList(tag){
 let expandedTimelineStops=new Set();
 let expandedDiaryStops=new Set();
 function renderTimelineStop(tl,tripId,index){
-  // 合併 trip_location_ratings + location_ratings（地圖直接評分也顯示在行程裡）
+  // 合併 trip_location_ratings + location_ratings（僅限「這次行程的參與者」在地圖上的直接評分，避免沒參加的人也被拉進來）
+  const participantIds=getTripParticipants(tripId);
   const tlRatings=getTripLocationRatings(tl.id);
-  const directRatings=tl.location_id?locationRatings.filter(r=>r.location_id===tl.location_id):[];
+  const directRatings=tl.location_id?locationRatings.filter(r=>r.location_id===tl.location_id&&participantIds.includes(r.member_id)):[];
   const seen=new Set(tlRatings.map(r=>r.member_id+'_'+r.stars+'_'+(r.comment||'')));
   const extra=directRatings.filter(r=>{
     const key=r.member_id+'_'+r.stars+'_'+(r.comment||'');
